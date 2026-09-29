@@ -45,6 +45,9 @@ constexpr Wanted kWanted[] = {
      &SymbolOffsets::xamlAltTabCreateInstance},
 };
 
+constexpr wchar_t kVirtualDesktopMask[] = L"*CVirtualDesktop*";
+constexpr wchar_t kWin32ApplicationViewMask[] = L"*CWin32ApplicationView*";
+
 struct EnumContext {
     DWORD64 base{};
     SymbolOffsets* offsets{};
@@ -106,6 +109,21 @@ BOOL CALLBACK EnumTargetedSymbol(PSYMBOL_INFOW info, ULONG, PVOID user) {
     return TRUE;
 }
 
+std::wstring TargetMask(const Wanted& wanted) {
+    if (wanted.member == &SymbolOffsets::virtualDesktopIsViewVisible) {
+        return kVirtualDesktopMask;
+    }
+    if (wanted.member == &SymbolOffsets::win32ViewVtable ||
+        wanted.member == &SymbolOffsets::win32GetNativeWindow) {
+        return kWin32ApplicationViewMask;
+    }
+
+    std::wstring mask = L"*";
+    mask += wanted.token1;
+    mask += L"*";
+    return mask;
+}
+
 void ResolveMissingWithTargetedSearch(HANDLE process, DWORD64 base,
                                       SymbolOffsets& offsets) {
     for (const auto& wanted : kWanted) {
@@ -114,10 +132,7 @@ void ResolveMissingWithTargetedSearch(HANDLE process, DWORD64 base,
 
         // Search raw/decorated symbols by their stable class or function token.
         // Examples include ??_7CWin32ApplicationView... for vtables.
-        std::wstring mask = L"*";
-        mask += wanted.token1;
-        mask += L"*";
-
+        const std::wstring mask = TargetMask(wanted);
         TargetedContext ctx{base, &wanted, &slot};
         SymEnumSymbolsW(process, base, mask.c_str(), EnumTargetedSymbol, &ctx);
     }
