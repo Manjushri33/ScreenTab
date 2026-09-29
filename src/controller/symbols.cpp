@@ -2,7 +2,9 @@
 #include <dbghelp.h>
 #include <windows.h>
 #include <array>
-#include <vector>
+#include <filesystem>
+#include <sstream>
+#include <string>
 #include <string_view>
 
 #pragma comment(lib, "dbghelp.lib")
@@ -10,19 +12,35 @@
 namespace mat {
 namespace {
 struct Wanted {
-    const wchar_t* needle;
+    const wchar_t* label;
+    const wchar_t* needle1;
+    const wchar_t* needle2;
     std::uint64_t SymbolOffsets::* member;
 };
 
+// DbgHelp's undecorated names can vary slightly between Windows/PDB versions.
+// Match stable class/function identifiers instead of complete demangled signatures.
 constexpr Wanted kWanted[] = {
-    {L"CVirtualDesktop::IsViewVisible(struct IApplicationView *,int *)", &SymbolOffsets::virtualDesktopIsViewVisible},
-    {L"CWin32ApplicationView::`vftable'{for `IApplicationView'}", &SymbolOffsets::win32ViewVtable},
-    {L"CWin32ApplicationView::v_GetNativeWindow(struct HWND__ * *)", &SymbolOffsets::win32GetNativeWindow},
-    {L"CWinRTApplicationView::`vftable'{for `IApplicationView'}", &SymbolOffsets::winrtViewVtable},
-    {L"CWinRTApplicationView::v_GetNativeWindow(struct HWND__ * *)", &SymbolOffsets::winrtGetNativeWindow},
-    {L"XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *)", &SymbolOffsets::xamlAltTabShow},
-    {L"ITaskGroupWindowInformation>::Position(struct winrt::Windows::Foundation::Rect const &)", &SymbolOffsets::taskGroupPosition},
-    {L"XamlAltTabViewHost_CreateInstance(struct XamlViewHostInitializeArgs const &,struct _GUID const &,void * *)", &SymbolOffsets::xamlAltTabCreateInstance},
+    {L"CVirtualDesktop::IsViewVisible", L"CVirtualDesktop::IsViewVisible", nullptr,
+     &SymbolOffsets::virtualDesktopIsViewVisible},
+    {L"CWin32ApplicationView IApplicationView vtable",
+     L"CWin32ApplicationView::`vftable'", L"IApplicationView",
+     &SymbolOffsets::win32ViewVtable},
+    {L"CWin32ApplicationView::v_GetNativeWindow",
+     L"CWin32ApplicationView::v_GetNativeWindow", nullptr,
+     &SymbolOffsets::win32GetNativeWindow},
+    {L"CWinRTApplicationView IApplicationView vtable",
+     L"CWinRTApplicationView::`vftable'", L"IApplicationView",
+     &SymbolOffsets::winrtViewVtable},
+    {L"CWinRTApplicationView::v_GetNativeWindow",
+     L"CWinRTApplicationView::v_GetNativeWindow", nullptr,
+     &SymbolOffsets::winrtGetNativeWindow},
+    {L"XamlAltTabViewHost::Show", L"XamlAltTabViewHost::Show", nullptr,
+     &SymbolOffsets::xamlAltTabShow},
+    {L"ITaskGroupWindowInformation::Position", L"ITaskGroupWindowInformation", L"::Position",
+     &SymbolOffsets::taskGroupPosition},
+    {L"XamlAltTabViewHost_CreateInstance", L"XamlAltTabViewHost_CreateInstance", nullptr,
+     &SymbolOffsets::xamlAltTabCreateInstance},
 };
 
 struct EnumContext {
@@ -30,13 +48,18 @@ struct EnumContext {
     SymbolOffsets* offsets{};
 };
 
+bool Matches(std::wstring_view name, const Wanted& wanted) {
+    if (name.find(wanted.needle1) == std::wstring_view::npos) return false;
+    return !wanted.needle2 || name.find(wanted.needle2) != std::wstring_view::npos;
+}
+
 BOOL CALLBACK EnumSymbols(PSYMBOL_INFOW info, ULONG, PVOID user) {
     auto* ctx = static_cast<EnumContext*>(user);
     std::wstring_view name(info->Name, info->NameLen);
     for (const auto& wanted : kWanted) {
         auto& slot = ctx->offsets->*(wanted.member);
         if (slot != 0) continue;
-        if (name.find(wanted.needle) != std::wstring_view::npos) {
+        if (Matches(name, wanted)) {
             slot = info->Address - ctx->base;
         }
     }
@@ -49,9 +72,23 @@ bool Complete(const SymbolOffsets& s) {
            s.winrtGetNativeWindow && s.xamlAltTabShow &&
            s.taskGroupPosition && s.xamlAltTabCreateInstance;
 }
+
+std::wstring MissingSymbols(const SymbolOffsets& offsets) {
+    std::wostringstream stream;
+    bool first = true;
+    for (const auto& wanted : kWanted) {
+        if (offsets.*(wanted.member) != 0) continue;
+        if (!first) stream << L", ";
+        stream << wanted.label;
+        first = false;
+    }
+    return stream.str();
+}
 }
 
 bool ResolveTwinuiSymbols(SymbolOffsets& out, std::wstring& error) {
+    out = {};
+
     wchar_t systemDir[MAX_PATH]{};
     if (!GetSystemDirectoryW(systemDir, MAX_PATH)) {
         error = L"GetSystemDirectory failed";
@@ -82,8 +119,11 @@ bool ResolveTwinuiSymbols(SymbolOffsets& out, std::wstring& error) {
     }
 
     EnumContext ctx{base, &out};
-    if (!SymEnumSymbolsW(process, base, nullptr, EnumSymbols, &ctx) || !Complete(out)) {
+    const BOOL enumerated = SymEnumSymbolsW(process, base, nullptr, EnumSymbols, &ctx);
+    if (!enumerated || !Complete(out)) {
         error = L"Required Alt+Tab symbols were not found for this Windows build";
+        const auto missing = MissingSymbols(out);
+        if (!missing.empty()) error += L". Missing symbols: " + missing;
         SymUnloadModule64(process, base);
         SymCleanup(process);
         return false;
