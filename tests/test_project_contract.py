@@ -51,5 +51,18 @@ class ProjectContractTests(unittest.TestCase):
         self.assertIn('ScreenTab.exe', text)
         self.assertIn('runhidden', text)
 
+    def test_symbol_resolver_matches_stable_identifiers_and_reports_missing_symbols(self):
+        text = self.read('src/controller/symbols.cpp')
+        # DbgHelp's undecorated output can vary between Windows/PDB versions.
+        # Matching should use stable class/function identifiers rather than one
+        # complete demangled signature.
+        self.assertIn('CWin32ApplicationView::v_GetNativeWindow', text)
+        self.assertIn('ITaskGroupWindowInformation', text)
+        self.assertIn('::Position', text)
+        self.assertNotIn('ITaskGroupWindowInformation>::Position', text)
+        # A failed lookup must say which symbols were missing, so a new Windows
+        # build can be diagnosed without guessing.
+        self.assertIn('Missing symbols:', text)
+
 if __name__ == '__main__':
     unittest.main()
