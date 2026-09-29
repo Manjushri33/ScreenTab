@@ -1,7 +1,102 @@
+<div align="center">
+  <img src="assets/app-icon.png" alt="ScreenTab icon" width="160" />
+
 # ScreenTab
 
 **Alt+Tab for the screen you're actually using.**
 
 ScreenTab is a small open-source Windows 11 utility that keeps the native Alt+Tab interface and thumbnails, while showing only windows that belong to the monitor you're currently working on.
 
-> Developer preview. The first Windows build still needs validation on real Windows 11 hardware.
+[![Build](https://github.com/Manjushri33/ScreenTab/actions/workflows/build.yml/badge.svg)](https://github.com/Manjushri33/ScreenTab/actions/workflows/build.yml)
+
+</div>
+
+## Features
+
+- Keeps the native Windows 11 Alt+Tab UI and live thumbnails.
+- Shows only windows from the monitor containing the foreground window.
+- Falls back to the mouse cursor's monitor when needed.
+- Keeps the Alt+Tab switcher on the active monitor.
+- Works across repeated and rapid Alt+Tab invocations.
+- Leaves `Win + Tab` / Task View unchanged.
+- Runs quietly in the system tray.
+- Includes **Pause**, **Start with Windows**, **About**, and **Exit**.
+- Reconnects automatically after Explorer restarts.
+
+## Download
+
+ScreenTab is currently a **developer preview**. Once the first Windows build is validated, the recommended download will be:
+
+**Releases → latest release → `ScreenTab-Setup.exe`**
+
+Do not download random `.exe` files from the source tree. Official binaries will be attached to GitHub Releases and accompanied by a SHA-256 checksum.
+
+## Install and use
+
+1. Download `ScreenTab-Setup.exe` from the latest GitHub Release.
+2. Run the installer.
+3. ScreenTab starts in the system tray and enables **Start with Windows** by default.
+4. Use `Alt + Tab` normally.
+
+When you're working on one monitor, Alt+Tab only shows windows from that monitor. Move to another monitor and the list follows you.
+
+Right-click the ScreenTab tray icon to pause filtering, change startup behavior, view About, or exit.
+
+## Requirements
+
+- Windows 11
+- x64 PC
+- The standard Windows 11 Alt+Tab experience
+
+The first public version does not target Windows 10, ARM64, old ExplorerPatcher Alt+Tab modes, or third-party task switchers.
+
+## How it works
+
+ScreenTab uses a small native controller plus a hook DLL loaded into the current user's Explorer process. It filters the Windows shell application-view visibility path only while Alt+Tab is being built, so Windows continues to draw its own switcher and thumbnails.
+
+Windows does not expose a supported public API for per-monitor native Alt+Tab filtering, so this relies on Windows shell internals that may change between builds. ScreenTab resolves the installed build's shell symbols at runtime and **fails open**: if a compatible symbol can't be resolved, it leaves standard Alt+Tab untouched.
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for technical details.
+
+## Build from source
+
+Requirements:
+
+- Windows 11 x64
+- Visual Studio 2022 with **Desktop development with C++**
+- CMake 3.24+
+- Internet access on the first configure/build
+- Inno Setup 6 to build the installer
+
+```powershell
+cmake -S . -B build -A x64
+cmake --build build --config Release
+```
+
+Build the installer with:
+
+```powershell
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\ScreenTab.iss
+```
+
+Or run:
+
+```powershell
+.\scripts\build.ps1
+```
+
+## Contributing
+
+Bug reports are especially useful when they include the Windows 11 build number, whether the normal native Alt+Tab UI is enabled, and exact reproduction steps.
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Credits
+
+The filtering strategy and relevant Windows shell symbol names were informed by the open-source Windhawk **Alt+Tab per monitor** mod by L3r0y and the Windhawk project by Ramen Software. ScreenTab is a separate standalone implementation and does not require Windhawk.
+
+Third-party licenses and notices are listed in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
+## License
+
+ScreenTab's own source is released under the [MIT License](LICENSE).
