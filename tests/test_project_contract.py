@@ -82,12 +82,16 @@ class ProjectContractTests(unittest.TestCase):
         self.assertIn('CompanyName', version_rc)
         self.assertIn('Manjushri33', version_rc)
 
-    def test_symbol_resolver_matches_stable_identifiers_and_reports_missing_symbols(self):
+    def test_symbol_resolver_matches_decorated_names_and_uses_targeted_fallback(self):
         text = self.read('src/controller/symbols.cpp')
-        self.assertIn('CWin32ApplicationView::v_GetNativeWindow', text)
-        self.assertIn('ITaskGroupWindowInformation', text)
-        self.assertIn('::Position', text)
-        self.assertNotIn('ITaskGroupWindowInformation>::Position', text)
+        self.assertIn('CWin32ApplicationView', text)
+        self.assertIn('IApplicationView', text)
+        self.assertIn('CVirtualDesktop', text)
+        self.assertIn('IsViewVisible', text)
+        self.assertIn('??_7', text)
+        self.assertIn('*CVirtualDesktop*', text)
+        self.assertIn('*CWin32ApplicationView*', text)
+        self.assertIn('ResolveMissingWithTargetedSearch', text)
         self.assertIn('Missing symbols:', text)
 
 if __name__ == '__main__':
