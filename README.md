@@ -5,7 +5,7 @@
 
 **Alt+Tab for the screen you're actually using.**
 
-ScreenTab is a small open-source Windows 11 utility that keeps the native Alt+Tab interface and thumbnails, while showing only windows that belong to the monitor you're currently working on.
+ScreenTab is a small open-source Windows 11 utility that keeps the native Alt+Tab interface and thumbnails while showing only windows that belong to the monitor you're currently working on.
 
 [![Build](https://github.com/Manjushri33/ScreenTab/actions/workflows/build.yml/badge.svg)](https://github.com/Manjushri33/ScreenTab/actions/workflows/build.yml)
 
@@ -13,47 +13,50 @@ ScreenTab is a small open-source Windows 11 utility that keeps the native Alt+Ta
 
 ## Features
 
-- Keeps the native Windows 11 Alt+Tab UI and live thumbnails.
-- Shows only windows from the monitor containing the foreground window.
-- Falls back to the mouse cursor's monitor when needed.
-- Keeps the Alt+Tab switcher on the active monitor.
-- Works across repeated and rapid Alt+Tab invocations.
-- Leaves `Win + Tab` / Task View unchanged.
-- Runs quietly in the system tray.
-- Includes **Pause**, **Start with Windows**, **About**, and **Exit**.
-- Reconnects automatically after Explorer restarts.
+- Native Windows 11 Alt+Tab UI and live thumbnails.
+- Only windows from the active monitor.
+- Alt+Tab switcher follows the active monitor.
+- Repeated and rapid Alt+Tab switching.
+- `Win + Tab` / Task View stays unchanged.
+- Small system-tray controller with **Pause**, **Start with Windows**, **About**, and **Exit**.
+- Automatically reconnects after Explorer restarts.
 
-## Download
+## Install
 
-ScreenTab is currently a **developer preview**. After the Windows build is validated, use:
+### Installer — recommended
 
-**Releases → Latest → `ScreenTab-Setup.exe`**
+1. Open **Releases** and download `ScreenTab-Setup.exe` from the latest validated release.
+2. Run the installer.
+3. Choose the installation folder if you don't want the default `C:\Program Files\ScreenTab` location.
+4. Leave **Start ScreenTab with Windows** enabled if you want ScreenTab to start automatically.
+5. Leave **Launch ScreenTab** enabled to start it after installation.
 
-Official releases also include `ScreenTab-Setup.exe.sha256` so the installer can be verified.
+If Windows SmartScreen appears because an early build is not code-signed, use **More info → Run anyway** only when the file came from this repository's official Releases page.
 
-## Installation
+ScreenTab appears in **Windows Settings → Apps → Installed apps**, where it can be uninstalled normally.
 
-1. Download `ScreenTab-Setup.exe` from the latest GitHub Release.
-2. Double-click the installer.
-3. If Windows SmartScreen appears because this early build is not code-signed, choose **More info → Run anyway** only if you downloaded it from this repository's official Releases page.
-4. Complete the installer.
-5. ScreenTab starts automatically and appears in the system tray.
-6. **Start with Windows** is enabled by default.
+### Portable
 
-After installation, use `Alt + Tab` normally. When you're working on one monitor, ScreenTab shows only windows from that monitor. Switch to another monitor and the Alt+Tab list follows you.
+Download `ScreenTab-windows-x64.zip`, extract it to a permanent folder, keep `ScreenTab.exe` and `ScreenTabHook.dll` together, and run `ScreenTab.exe`.
+
+Portable mode does not create an Installed Apps entry. Use the tray menu's **Start with Windows** option if you want autostart.
+
+## Use
+
+Use `Alt + Tab` normally. ScreenTab keeps the native Windows switcher but filters it to the monitor you're currently using.
 
 Right-click the tray icon for:
 
-- **Pause** — temporarily restore normal Alt+Tab behavior.
-- **Start with Windows** — enable or disable automatic startup.
-- **About** — version and project information.
-- **Exit** — close ScreenTab and immediately restore standard Windows Alt+Tab.
+- **Pause** — temporarily restore standard Alt+Tab behavior.
+- **Start with Windows** — toggle automatic startup.
+- **About** — show version information.
+- **Exit** — close ScreenTab and restore standard Alt+Tab.
 
-### Uninstall
+## Uninstall
 
-Open **Windows Settings → Apps → Installed apps → ScreenTab → Uninstall**.
+For an installer build, open **Windows Settings → Apps → Installed apps → ScreenTab → Uninstall**. The uninstaller closes ScreenTab, removes its startup entry, unloads its Explorer hook, and removes the symbol cache.
 
-The uninstaller removes ScreenTab and its startup entry.
+For portable mode, choose **Exit**, disable **Start with Windows** if it was enabled, and delete the extracted folder.
 
 ## Requirements
 
@@ -61,13 +64,13 @@ The uninstaller removes ScreenTab and its startup entry.
 - x64 PC
 - Standard Windows 11 Alt+Tab
 
-The first public version does not target Windows 10, ARM64, old ExplorerPatcher Alt+Tab modes, or third-party task switchers.
+Windows 10, ARM64, old ExplorerPatcher Alt+Tab modes, and third-party task switchers are not targeted by the first release series.
 
 ## How it works
 
 ScreenTab uses a small native controller plus a hook DLL loaded into the current user's Explorer process. It filters the Windows shell application-view visibility path only while Alt+Tab is being built, so Windows continues to draw its own switcher and thumbnails.
 
-Windows does not expose a supported public API for per-monitor native Alt+Tab filtering, so this relies on Windows shell internals that may change between builds. ScreenTab resolves the installed build's shell symbols at runtime and **fails open**: if a compatible symbol can't be resolved, it leaves standard Alt+Tab untouched.
+Windows doesn't expose a supported public API for per-monitor native Alt+Tab filtering. ScreenTab therefore resolves the installed Windows build's shell symbols at runtime and **fails open**: if the required symbols can't be resolved, standard Alt+Tab remains unchanged.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for technical details.
 
@@ -79,7 +82,7 @@ Requirements:
 - Visual Studio 2022 with **Desktop development with C++**
 - CMake 3.24+
 - Python 3
-- Inno Setup 6 to build the installer
+- Inno Setup 6
 
 ```powershell
 python -m pip install pillow
@@ -102,9 +105,7 @@ Or run:
 
 ## Contributing
 
-Bug reports are especially useful when they include the Windows 11 build number, whether the normal native Alt+Tab UI is enabled, and exact reproduction steps.
-
-See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Bug reports are especially useful when they include the Windows 11 build number and exact reproduction steps. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Credits
 
