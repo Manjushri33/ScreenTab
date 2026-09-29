@@ -76,7 +76,7 @@ jobs:
             installer/Output/ScreenTab-Setup.exe.sha256
 
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') || github.event.head_commit.message == 'release: v0.1.0'
+        if: "startsWith(github.ref, 'refs/tags/v') || github.event.head_commit.message == 'release: v0.1.0'"
         shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
