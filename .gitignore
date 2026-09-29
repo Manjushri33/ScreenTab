@@ -1,0 +1,10 @@
+/build/
+/build-*/
+.vs/
+CMakeSettings.json
+*.user
+*.suo
+installer/Output/
+__pycache__/
+*.pyc
+.DS_Store
