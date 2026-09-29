@@ -55,9 +55,11 @@ class ProjectContractTests(unittest.TestCase):
         text = self.read('installer/ScreenTab.iss')
         for expected in [
             '#define MyAppVersion "0.1.1"',
-            'AppPublisher=Manjushri33',
-            'AppPublisherURL=https://github.com/Manjushri33/ScreenTab',
-            'AppSupportURL=https://github.com/Manjushri33/ScreenTab/issues',
+            '#define MyAppPublisher "Manjushri33"',
+            '#define MyAppURL "https://github.com/Manjushri33/ScreenTab"',
+            'AppPublisher={#MyAppPublisher}',
+            'AppPublisherURL={#MyAppURL}',
+            'AppSupportURL={#MyAppURL}/issues',
             'CreateUninstallRegKey=yes',
             'Uninstallable=yes',
             'DisableDirPage=no',
