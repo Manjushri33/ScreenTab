@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/app-icon.png" alt="ScreenTab icon" width="160" />
+  <img src="assets/app-icon.png?v=3" alt="ScreenTab icon" width="160" />
 
 # ScreenTab
 
@@ -25,28 +25,41 @@ ScreenTab is a small open-source Windows 11 utility that keeps the native Alt+Ta
 
 ## Download
 
-ScreenTab is currently a **developer preview**. Once the first Windows build is validated, the recommended download will be:
+ScreenTab is currently a **developer preview**. After the Windows build is validated, use:
 
-**Releases → latest release → `ScreenTab-Setup.exe`**
+**Releases → Latest → `ScreenTab-Setup.exe`**
 
-Do not download random `.exe` files from the source tree. Official binaries will be attached to GitHub Releases and accompanied by a SHA-256 checksum.
+Official releases also include `ScreenTab-Setup.exe.sha256` so the installer can be verified.
 
-## Install and use
+## Installation
 
 1. Download `ScreenTab-Setup.exe` from the latest GitHub Release.
-2. Run the installer.
-3. ScreenTab starts in the system tray and enables **Start with Windows** by default.
-4. Use `Alt + Tab` normally.
+2. Double-click the installer.
+3. If Windows SmartScreen appears because this early build is not code-signed, choose **More info → Run anyway** only if you downloaded it from this repository's official Releases page.
+4. Complete the installer.
+5. ScreenTab starts automatically and appears in the system tray.
+6. **Start with Windows** is enabled by default.
 
-When you're working on one monitor, Alt+Tab only shows windows from that monitor. Move to another monitor and the list follows you.
+After installation, use `Alt + Tab` normally. When you're working on one monitor, ScreenTab shows only windows from that monitor. Switch to another monitor and the Alt+Tab list follows you.
 
-Right-click the ScreenTab tray icon to pause filtering, change startup behavior, view About, or exit.
+Right-click the tray icon for:
+
+- **Pause** — temporarily restore normal Alt+Tab behavior.
+- **Start with Windows** — enable or disable automatic startup.
+- **About** — version and project information.
+- **Exit** — close ScreenTab and immediately restore standard Windows Alt+Tab.
+
+### Uninstall
+
+Open **Windows Settings → Apps → Installed apps → ScreenTab → Uninstall**.
+
+The uninstaller removes ScreenTab and its startup entry.
 
 ## Requirements
 
 - Windows 11
 - x64 PC
-- The standard Windows 11 Alt+Tab experience
+- Standard Windows 11 Alt+Tab
 
 The first public version does not target Windows 10, ARM64, old ExplorerPatcher Alt+Tab modes, or third-party task switchers.
 
@@ -65,10 +78,12 @@ Requirements:
 - Windows 11 x64
 - Visual Studio 2022 with **Desktop development with C++**
 - CMake 3.24+
-- Internet access on the first configure/build
+- Python 3
 - Inno Setup 6 to build the installer
 
 ```powershell
+python -m pip install pillow
+python scripts/make_icon.py
 cmake -S . -B build -A x64
 cmake --build build --config Release
 ```
