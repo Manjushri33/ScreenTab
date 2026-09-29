@@ -13,33 +13,35 @@ namespace mat {
 namespace {
 struct Wanted {
     const wchar_t* label;
-    const wchar_t* needle1;
-    const wchar_t* needle2;
+    const wchar_t* token1;
+    const wchar_t* token2;
+    const wchar_t* token3;
     std::uint64_t SymbolOffsets::* member;
 };
 
-// DbgHelp's undecorated names can vary slightly between Windows/PDB versions.
-// Match stable class/function identifiers instead of complete demangled signatures.
+// DbgHelp can return either undecorated names or raw MSVC decorated names.
+// Match stable identifiers which survive both forms instead of relying on one
+// exact demangled spelling.
 constexpr Wanted kWanted[] = {
-    {L"CVirtualDesktop::IsViewVisible", L"CVirtualDesktop::IsViewVisible", nullptr,
+    {L"CVirtualDesktop::IsViewVisible", L"CVirtualDesktop", L"IsViewVisible", nullptr,
      &SymbolOffsets::virtualDesktopIsViewVisible},
     {L"CWin32ApplicationView IApplicationView vtable",
-     L"CWin32ApplicationView::`vftable'", L"IApplicationView",
+     L"CWin32ApplicationView", L"IApplicationView", nullptr,
      &SymbolOffsets::win32ViewVtable},
     {L"CWin32ApplicationView::v_GetNativeWindow",
-     L"CWin32ApplicationView::v_GetNativeWindow", nullptr,
+     L"CWin32ApplicationView", L"v_GetNativeWindow", nullptr,
      &SymbolOffsets::win32GetNativeWindow},
     {L"CWinRTApplicationView IApplicationView vtable",
-     L"CWinRTApplicationView::`vftable'", L"IApplicationView",
+     L"CWinRTApplicationView", L"IApplicationView", nullptr,
      &SymbolOffsets::winrtViewVtable},
     {L"CWinRTApplicationView::v_GetNativeWindow",
-     L"CWinRTApplicationView::v_GetNativeWindow", nullptr,
+     L"CWinRTApplicationView", L"v_GetNativeWindow", nullptr,
      &SymbolOffsets::winrtGetNativeWindow},
-    {L"XamlAltTabViewHost::Show", L"XamlAltTabViewHost::Show", nullptr,
+    {L"XamlAltTabViewHost::Show", L"XamlAltTabViewHost", L"Show", nullptr,
      &SymbolOffsets::xamlAltTabShow},
-    {L"ITaskGroupWindowInformation::Position", L"ITaskGroupWindowInformation", L"::Position",
+    {L"ITaskGroupWindowInformation::Position", L"ITaskGroupWindowInformation", L"Position", nullptr,
      &SymbolOffsets::taskGroupPosition},
-    {L"XamlAltTabViewHost_CreateInstance", L"XamlAltTabViewHost_CreateInstance", nullptr,
+    {L"XamlAltTabViewHost_CreateInstance", L"XamlAltTabViewHost_CreateInstance", nullptr, nullptr,
      &SymbolOffsets::xamlAltTabCreateInstance},
 };
 
@@ -48,9 +50,29 @@ struct EnumContext {
     SymbolOffsets* offsets{};
 };
 
+bool Contains(std::wstring_view name, const wchar_t* token) {
+    return !token || name.find(token) != std::wstring_view::npos;
+}
+
+bool LooksLikeVtable(std::wstring_view name) {
+    // Undecorated DbgHelp form contains `vftable'. Raw MSVC decoration starts
+    // with ??_7. Keep both so the resolver works across PDB/DbgHelp versions.
+    return name.find(L"`vftable'") != std::wstring_view::npos ||
+           name.find(L"??_7") != std::wstring_view::npos;
+}
+
 bool Matches(std::wstring_view name, const Wanted& wanted) {
-    if (name.find(wanted.needle1) == std::wstring_view::npos) return false;
-    return !wanted.needle2 || name.find(wanted.needle2) != std::wstring_view::npos;
+    if (!Contains(name, wanted.token1) || !Contains(name, wanted.token2) ||
+        !Contains(name, wanted.token3)) {
+        return false;
+    }
+
+    if (wanted.member == &SymbolOffsets::win32ViewVtable ||
+        wanted.member == &SymbolOffsets::winrtViewVtable) {
+        return LooksLikeVtable(name);
+    }
+
+    return true;
 }
 
 BOOL CALLBACK EnumSymbols(PSYMBOL_INFOW info, ULONG, PVOID user) {
@@ -64,6 +86,41 @@ BOOL CALLBACK EnumSymbols(PSYMBOL_INFOW info, ULONG, PVOID user) {
         }
     }
     return TRUE;
+}
+
+struct TargetedContext {
+    DWORD64 base{};
+    const Wanted* wanted{};
+    std::uint64_t* slot{};
+};
+
+BOOL CALLBACK EnumTargetedSymbol(PSYMBOL_INFOW info, ULONG, PVOID user) {
+    auto* ctx = static_cast<TargetedContext*>(user);
+    if (*ctx->slot != 0) return FALSE;
+
+    std::wstring_view name(info->Name, info->NameLen);
+    if (Matches(name, *ctx->wanted)) {
+        *ctx->slot = info->Address - ctx->base;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+void ResolveMissingWithTargetedSearch(HANDLE process, DWORD64 base,
+                                      SymbolOffsets& offsets) {
+    for (const auto& wanted : kWanted) {
+        auto& slot = offsets.*(wanted.member);
+        if (slot != 0) continue;
+
+        // Search raw/decorated symbols by their stable class or function token.
+        // Examples include ??_7CWin32ApplicationView... for vtables.
+        std::wstring mask = L"*";
+        mask += wanted.token1;
+        mask += L"*";
+
+        TargetedContext ctx{base, &wanted, &slot};
+        SymEnumSymbolsW(process, base, mask.c_str(), EnumTargetedSymbol, &ctx);
+    }
 }
 
 bool Complete(const SymbolOffsets& s) {
@@ -120,6 +177,11 @@ bool ResolveTwinuiSymbols(SymbolOffsets& out, std::wstring& error) {
 
     EnumContext ctx{base, &out};
     const BOOL enumerated = SymEnumSymbolsW(process, base, nullptr, EnumSymbols, &ctx);
+
+    if (enumerated && !Complete(out)) {
+        ResolveMissingWithTargetedSearch(process, base, out);
+    }
+
     if (!enumerated || !Complete(out)) {
         error = L"Required Alt+Tab symbols were not found for this Windows build";
         const auto missing = MissingSymbols(out);
