@@ -14,6 +14,8 @@ class ProjectContractTests(unittest.TestCase):
             'src/controller/main.cpp',
             'src/controller/symbols.cpp',
             'src/controller/injector.cpp',
+            'src/controller/app.rc',
+            'src/controller/version.rc.in',
             'src/hook/dllmain.cpp',
             'src/hook/alt_tab_hook.cpp',
             'installer/ScreenTab.iss',
@@ -39,29 +41,51 @@ class ProjectContractTests(unittest.TestCase):
         self.assertIn('IsAltTabFilterWindowActive()', text)
         self.assertIn('return originalResult;', text)
 
-    def test_controller_supports_pause_and_autostart(self):
-        text = self.read('src/controller/main.cpp')
-        self.assertIn('Start with Windows', text)
-        self.assertIn('Pause', text)
-        self.assertIn('About', text)
-        self.assertIn('Exit', text)
+    def test_controller_supports_pause_autostart_and_clean_unload(self):
+        main = self.read('src/controller/main.cpp')
+        injector = self.read('src/controller/injector.cpp')
+        self.assertIn('Start with Windows', main)
+        self.assertIn('Pause', main)
+        self.assertIn('About', main)
+        self.assertIn('Exit', main)
+        self.assertIn('UninjectLibrary', injector)
+        self.assertIn('UninjectLibrary', main)
 
-    def test_installer_enables_startup_behavior(self):
+    def test_installer_is_registered_customizable_and_branded(self):
         text = self.read('installer/ScreenTab.iss')
-        self.assertIn('ScreenTab.exe', text)
-        self.assertIn('runhidden', text)
+        for expected in [
+            '#define MyAppVersion "0.1.1"',
+            'AppPublisher=Manjushri33',
+            'AppPublisherURL=https://github.com/Manjushri33/ScreenTab',
+            'AppSupportURL=https://github.com/Manjushri33/ScreenTab/issues',
+            'CreateUninstallRegKey=yes',
+            'Uninstallable=yes',
+            'DisableDirPage=no',
+            'SetupIconFile=..\\assets\\app-icon.ico',
+            'UninstallDisplayIcon={app}\\ScreenTab.exe',
+            'CloseApplications=yes',
+            '[Tasks]',
+            'Start ScreenTab with Windows',
+            'Launch ScreenTab',
+        ]:
+            self.assertIn(expected, text)
+
+    def test_version_metadata_is_embedded(self):
+        cmake = self.read('CMakeLists.txt')
+        version_rc = self.read('src/controller/version.rc.in')
+        self.assertIn('project(ScreenTab VERSION 0.1.1', cmake)
+        self.assertIn('configure_file(', cmake)
+        self.assertIn('FileDescription', version_rc)
+        self.assertIn('ScreenTab', version_rc)
+        self.assertIn('CompanyName', version_rc)
+        self.assertIn('Manjushri33', version_rc)
 
     def test_symbol_resolver_matches_stable_identifiers_and_reports_missing_symbols(self):
         text = self.read('src/controller/symbols.cpp')
-        # DbgHelp's undecorated output can vary between Windows/PDB versions.
-        # Matching should use stable class/function identifiers rather than one
-        # complete demangled signature.
         self.assertIn('CWin32ApplicationView::v_GetNativeWindow', text)
         self.assertIn('ITaskGroupWindowInformation', text)
         self.assertIn('::Position', text)
         self.assertNotIn('ITaskGroupWindowInformation>::Position', text)
-        # A failed lookup must say which symbols were missing, so a new Windows
-        # build can be diagnosed without guessing.
         self.assertIn('Missing symbols:', text)
 
 if __name__ == '__main__':
