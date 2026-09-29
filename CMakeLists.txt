@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(ScreenTab VERSION 0.1.0 LANGUAGES CXX)
+project(ScreenTab VERSION 0.1.1 LANGUAGES CXX)
 
 if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
   message(FATAL_ERROR "ScreenTab v0.1 supports Windows 11 x64 only")
@@ -17,11 +17,18 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(minhook)
 
+configure_file(
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/controller/version.rc.in
+  ${CMAKE_CURRENT_BINARY_DIR}/ScreenTabVersion.rc
+  @ONLY
+)
+
 add_executable(ScreenTab WIN32
   src/controller/main.cpp
   src/controller/symbols.cpp
   src/controller/injector.cpp
   src/controller/app.rc
+  ${CMAKE_CURRENT_BINARY_DIR}/ScreenTabVersion.rc
 )
 target_include_directories(ScreenTab PRIVATE src)
 target_compile_definitions(ScreenTab PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
