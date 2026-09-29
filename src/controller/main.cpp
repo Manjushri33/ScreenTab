@@ -79,11 +79,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         switch(LOWORD(wParam)) {
         case ID_PAUSE: g_paused=!g_paused; InterlockedExchange(&g_state->enabled, g_paused?0:1); break;
         case ID_STARTUP: SetStartWithWindows(!IsStartWithWindowsEnabled()); break;
-        case ID_ABOUT: MessageBoxW(hwnd,L"ScreenTab 0.1\nNative Alt+Tab, filtered to the active monitor.",L"About ScreenTab",MB_OK|MB_ICONINFORMATION); break;
+        case ID_ABOUT: MessageBoxW(hwnd,L"ScreenTab 0.1.1\nNative Alt+Tab, filtered to the active monitor.",L"About ScreenTab",MB_OK|MB_ICONINFORMATION); break;
         case ID_EXIT: InterlockedExchange(&g_state->enabled,0); DestroyWindow(hwnd); break;
         }
         return 0;
     case WM_TIMER: EnsureInjected(hwnd); return 0;
+    case WM_CLOSE:
+        if (g_state) InterlockedExchange(&g_state->enabled,0);
+        DestroyWindow(hwnd);
+        return 0;
     case WM_DESTROY: {
         NOTIFYICONDATAW nid{sizeof(nid)}; nid.hWnd=hwnd; nid.uID=1; Shell_NotifyIconW(NIM_DELETE,&nid);
         PostQuitMessage(0); return 0;
@@ -91,10 +95,22 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
     return DefWindowProcW(hwnd,msg,wParam,lParam);
 }
+
+bool RequestExistingInstanceShutdown() {
+    HWND hwnd = FindWindowW(L"ScreenTab.Controller", L"ScreenTab");
+    if (!hwnd) return true;
+    DWORD_PTR result = 0;
+    return SendMessageTimeoutW(hwnd, WM_CLOSE, 0, 0,
+                               SMTO_ABORTIFHUNG | SMTO_BLOCK, 5000, &result) != 0;
+}
 }
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
+    if (wcsstr(GetCommandLineW(), L"--shutdown")) {
+        return RequestExistingInstanceShutdown() ? 0 : 1;
+    }
     if (wcsstr(GetCommandLineW(), L"--install-startup")) SetStartWithWindows(true);
+
     HANDLE mutex=CreateMutexW(nullptr,TRUE,L"Local\\ScreenTab.Controller.v1");
     if (!mutex || GetLastError()==ERROR_ALREADY_EXISTS) return 0;
 
@@ -120,7 +136,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     else EnsureInjected(hwnd);
     SetTimer(hwnd,ID_TIMER,2000,nullptr);
 
-    MSG msg{}; while(GetMessageW(&msg,nullptr,0,0)>0){TranslateMessage(&msg);DispatchMessageW(&msg);}    
-    if(g_state) UnmapViewOfFile(g_state); if(g_mapping) CloseHandle(g_mapping); if(mutex) CloseHandle(mutex);
+    MSG msg{}; while(GetMessageW(&msg,nullptr,0,0)>0){TranslateMessage(&msg);DispatchMessageW(&msg);}
+
+    if (g_state) InterlockedExchange(&g_state->enabled,0);
+    if (g_injectedPid) {
+        std::wstring unloadError;
+        mat::UninjectLibrary(g_injectedPid, L"ScreenTabHook.dll", unloadError);
+    }
+    if(g_state) UnmapViewOfFile(g_state);
+    if(g_mapping) CloseHandle(g_mapping);
+    if(mutex) CloseHandle(mutex);
     return 0;
 }
