@@ -1,0 +1,69 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run contract tests
+        shell: powershell
+        run: python -m unittest discover -s tests -v
+
+      - name: Configure
+        run: cmake -S . -B build -A x64
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup -y --no-progress
+
+      - name: Build installer
+        shell: powershell
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\ScreenTab.iss'
+
+      - name: Create SHA-256 checksum
+        shell: powershell
+        run: |
+          $file = "installer\Output\ScreenTab-Setup.exe"
+          $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+          "$hash  ScreenTab-Setup.exe" | Set-Content "installer\Output\ScreenTab-Setup.exe.sha256" -Encoding ascii
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ScreenTab-windows-x64
+          path: |
+            build/Release/ScreenTab.exe
+            build/Release/ScreenTabHook.dll
+            installer/Output/ScreenTab-Setup.exe
+            installer/Output/ScreenTab-Setup.exe.sha256
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            "installer/Output/ScreenTab-Setup.exe" `
+            "installer/Output/ScreenTab-Setup.exe.sha256" `
+            --repo "${{ github.repository }}" `
+            --title "ScreenTab ${{ github.ref_name }}" `
+            --generate-notes
