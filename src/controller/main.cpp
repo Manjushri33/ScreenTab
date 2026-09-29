@@ -109,7 +109,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     if (wcsstr(GetCommandLineW(), L"--shutdown")) {
         return RequestExistingInstanceShutdown() ? 0 : 1;
     }
-    if (wcsstr(GetCommandLineW(), L"--install-startup")) SetStartWithWindows(true);
+    if (wcsstr(GetCommandLineW(), L"--install-startup")) {
+        SetStartWithWindows(true);
+        return 0;
+    }
 
     HANDLE mutex=CreateMutexW(nullptr,TRUE,L"Local\\ScreenTab.Controller.v1");
     if (!mutex || GetLastError()==ERROR_ALREADY_EXISTS) return 0;
