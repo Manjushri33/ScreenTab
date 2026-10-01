@@ -142,6 +142,7 @@ class ProjectContractTests(unittest.TestCase):
         self.assertIn('hookInitThreadId', dllmain)
         self.assertIn('HookInitThreadFinished', main)
         self.assertIn('FreeLibraryAndExitThread', dllmain)
+        self.assertIn('if (!thread) return FALSE;', dllmain)
 
     def test_tray_icon_returns_after_explorer_restart(self):
         main = self.read('src/controller/main.cpp')

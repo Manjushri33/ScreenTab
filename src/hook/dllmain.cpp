@@ -32,7 +32,8 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(instance);
         HANDLE thread=CreateThread(nullptr,0,InitThread,instance,0,nullptr);
-        if(thread) CloseHandle(thread);
+        if (!thread) return FALSE;
+        CloseHandle(thread);
     } else if (reason == DLL_PROCESS_DETACH) {
         ShutdownAltTabHooks();
     }
