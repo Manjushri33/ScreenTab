@@ -33,14 +33,17 @@ bool InjectLibrary(DWORD pid, const std::filesystem::path& dllPath, std::wstring
         GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "LoadLibraryW"));
     HANDLE thread = ok ? CreateRemoteThread(process, nullptr, 0, loadLibrary, remote, 0, nullptr) : nullptr;
     if (!thread) ok = false;
+    DWORD wait = WAIT_FAILED;
     if (thread) {
-        WaitForSingleObject(thread, 10000);
+        wait = WaitForSingleObject(thread, 10000);
         DWORD exitCode = 0;
-        GetExitCodeThread(thread, &exitCode);
-        ok = ok && exitCode != 0;
+        ok = ok && wait == WAIT_OBJECT_0 &&
+             GetExitCodeThread(thread, &exitCode) && exitCode != 0;
         CloseHandle(thread);
     }
-    VirtualFreeEx(process, remote, 0, MEM_RELEASE);
+    if (!thread) VirtualFreeEx(process, remote, 0, MEM_RELEASE);
+    // The remote thread may still be reading the path when the wait times out.
+    if (wait == WAIT_OBJECT_0) VirtualFreeEx(process, remote, 0, MEM_RELEASE);
     CloseHandle(process);
 
     if (!ok) error = L"Explorer did not load ScreenTabHook.dll";

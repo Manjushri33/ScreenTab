@@ -100,5 +100,33 @@ class ProjectContractTests(unittest.TestCase):
             self.assertIn(file, workflow)
             self.assertIn(file, installer)
 
+    def test_hook_checks_resolved_module_identity_and_reports_readiness(self):
+        protocol = self.read('src/common/protocol.h')
+        hook = self.read('src/hook/alt_tab_hook.cpp')
+        dllmain = self.read('src/hook/dllmain.cpp')
+        self.assertIn('ModuleIdentity', protocol)
+        self.assertIn('hookStatus', protocol)
+        self.assertIn('ModuleMatchesResolvedImage', hook)
+        self.assertIn('ReportHookStatus', dllmain)
+        self.assertNotIn('InterlockedExchange(&g_state->enabled,0)', hook)
+
+    def test_controller_re_resolves_on_explorer_change_and_retries_failure(self):
+        main = self.read('src/controller/main.cpp')
+        self.assertIn('StartResolution', main)
+        self.assertIn('WM_RESOLVED', main)
+        self.assertIn('kResolveRetryMs', main)
+        self.assertIn('hookStatus', main)
+        self.assertIn('g_pendingPid', main)
+
+    def test_injector_does_not_free_remote_path_while_load_is_running(self):
+        injector = self.read('src/controller/injector.cpp')
+        self.assertIn('wait == WAIT_OBJECT_0', injector)
+        self.assertIn('if (wait == WAIT_OBJECT_0) VirtualFreeEx', injector)
+
+    def test_tray_icon_returns_after_explorer_restart(self):
+        main = self.read('src/controller/main.cpp')
+        self.assertIn('RegisterWindowMessageW(L"TaskbarCreated")', main)
+        self.assertIn('AddTrayIcon(hwnd)', main)
+
 if __name__ == '__main__':
     unittest.main()

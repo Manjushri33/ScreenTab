@@ -113,8 +113,10 @@ bool CheckSymbolRuntime(std::wstring& error) {
 }
 }
 
-bool ResolveTwinuiSymbols(SymbolOffsets& out, std::wstring& error) {
+bool ResolveTwinuiSymbols(SymbolOffsets& out, ModuleIdentity& identity,
+                          std::wstring& error) {
     out = {};
+    identity = {};
     error.clear();
     if (!CheckSymbolRuntime(error)) return false;
 
@@ -173,6 +175,8 @@ bool ResolveTwinuiSymbols(SymbolOffsets& out, std::wstring& error) {
     } else if (!hasPdb) {
         error = L"Microsoft PDB for twinui.pcshell.dll was not loaded. "
                 L"Check the network connection and symbol server";
+    } else if (!moduleInfo.ImageSize) {
+        error = L"Could not identify the twinui.pcshell.dll image";
     } else if (ctx.duplicate || ctx.invalidAddress) {
         error = L"Ambiguous or invalid Alt+Tab symbol addresses for this Windows build";
     } else if (!Complete(out)) {
@@ -193,6 +197,8 @@ bool ResolveTwinuiSymbols(SymbolOffsets& out, std::wstring& error) {
         out = {};
         return false;
     }
+    identity = {moduleInfo.TimeDateStamp, moduleInfo.ImageSize,
+                moduleInfo.CheckSum};
     return true;
 }
 }

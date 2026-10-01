@@ -5,7 +5,8 @@
 #include "common/protocol.h"
 
 namespace mat {
-bool ResolveTwinuiSymbols(SymbolOffsets& out, std::wstring& error);
+bool ResolveTwinuiSymbols(SymbolOffsets& out, ModuleIdentity& identity,
+                          std::wstring& error);
 DWORD FindExplorerProcessId();
 bool InjectLibrary(DWORD pid, const std::filesystem::path& dllPath, std::wstring& error);
 bool UninjectLibrary(DWORD pid, const std::wstring& moduleName, std::wstring& error);

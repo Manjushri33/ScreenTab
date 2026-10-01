@@ -1,3 +1,5 @@
 #pragma once
-bool InitializeAltTabHooks();
+#include "common/protocol.h"
+
+mat::HookStatus InitializeAltTabHooks();
 void ShutdownAltTabHooks();

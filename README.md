@@ -20,6 +20,8 @@ ScreenTab is a small open-source Windows 11 utility that keeps the native Alt+Ta
 - `Win + Tab` / Task View stays unchanged.
 - Small system-tray controller with **Pause**, **Start with Windows**, **About**, and **Exit**.
 - Automatically reconnects after Explorer restarts.
+- Rechecks the Windows shell image and symbols before reconnecting after an Explorer restart.
+- Shows hook startup and recovery status in the system-tray menu.
 
 ## Install
 
@@ -73,7 +75,7 @@ ScreenTab uses a small native controller plus a hook DLL loaded into the current
 
 Windows doesn't expose a supported public API for per-monitor native Alt+Tab filtering. ScreenTab therefore resolves the installed Windows build's shell symbols at runtime and **fails open**: if the required symbols can't be resolved, standard Alt+Tab remains unchanged.
 
-The portable ZIP and installer include Microsoft's DbgHelp symbol runtime. If the matching `twinui.pcshell.pdb` is unavailable from Microsoft's symbol server, ScreenTab leaves Alt+Tab unchanged and reports the problem from its tray icon.
+The portable ZIP and installer include Microsoft's DbgHelp symbol runtime. If the matching `twinui.pcshell.pdb` is unavailable from Microsoft's symbol server, ScreenTab leaves Alt+Tab unchanged, reports the problem from its tray icon, and retries automatically. When Explorer restarts, ScreenTab resolves the symbols again and checks that the loaded shell image matches before installing hooks.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for technical details.
 
