@@ -35,6 +35,7 @@ struct SharedState {
     volatile LONG enabled{1};
     volatile LONG symbolsReady{0};
     volatile LONG hookStatus{static_cast<LONG>(HookStatus::Pending)};
+    DWORD hookInitThreadId{};
     DWORD explorerPid{};
     ModuleIdentity moduleIdentity{};
     SymbolOffsets symbols{};

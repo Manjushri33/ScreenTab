@@ -17,6 +17,7 @@ constexpr UINT ID_STATUS = 1005;
 constexpr UINT_PTR ID_TIMER = 42;
 constexpr ULONGLONG kResolveRetryMs = 5 * 60 * 1000;
 constexpr ULONGLONG kHookStartWarningMs = 15 * 1000;
+constexpr ULONGLONG kHookStartupTimeoutMs = 60 * 1000;
 constexpr ULONGLONG kRetryOnExplorerRestart = static_cast<ULONGLONG>(-1);
 
 struct ResolveResult {
@@ -37,6 +38,7 @@ ULONGLONG g_pendingSince = 0;
 ULONGLONG g_nextResolveTick = 0;
 bool g_resolving = false;
 bool g_pendingWarned = false;
+bool g_pendingTimedOut = false;
 bool g_paused = false;
 std::wstring g_status = L"Starting";
 std::wstring g_lastProblem;
@@ -144,6 +146,18 @@ void StartResolution(HWND hwnd, DWORD pid) {
     }
 }
 
+bool HookInitThreadFinished(DWORD pid) {
+    const DWORD tid = g_state->hookInitThreadId;
+    if (!tid) return false;
+    HANDLE thread = OpenThread(SYNCHRONIZE | THREAD_QUERY_LIMITED_INFORMATION,
+                               FALSE, tid);
+    if (!thread) return GetLastError() == ERROR_INVALID_PARAMETER;
+    const DWORD owner = GetProcessIdOfThread(thread);
+    const DWORD wait = WaitForSingleObject(thread, 0);
+    CloseHandle(thread);
+    return owner != 0 && (owner != pid || wait == WAIT_OBJECT_0);
+}
+
 void EnsureInjected(HWND hwnd) {
     if (!g_state) return;
     const DWORD pid = mat::FindExplorerProcessId();
@@ -154,8 +168,10 @@ void EnsureInjected(HWND hwnd) {
         g_activePid = 0;
         g_pendingPid = 0;
         g_pendingWarned = false;
+        g_pendingTimedOut = false;
         g_nextResolveTick = 0;
         g_state->explorerPid = pid;
+        g_state->hookInitThreadId = 0;
         InterlockedExchange(&g_state->symbolsReady, 0);
         InterlockedExchange(&g_state->hookStatus,
                             static_cast<LONG>(mat::HookStatus::Pending));
@@ -165,27 +181,35 @@ void EnsureInjected(HWND hwnd) {
 
     if (g_pendingPid == pid) {
         const LONG status = InterlockedCompareExchange(&g_state->hookStatus, 0, 0);
-        if (status == static_cast<LONG>(mat::HookStatus::Ready)) {
+        const bool reportedAndFinished =
+            status != static_cast<LONG>(mat::HookStatus::Pending) &&
+            HookInitThreadFinished(pid);
+        if (reportedAndFinished &&
+            status == static_cast<LONG>(mat::HookStatus::Ready)) {
             g_pendingPid = 0;
             g_activePid = pid;
             InterlockedExchange(&g_state->enabled, g_paused ? 0 : 1);
             g_lastProblem.clear();
             SetTrayStatus(hwnd, L"Working");
-        } else if (status == static_cast<LONG>(mat::HookStatus::ModuleMismatch) ||
-                   status == static_cast<LONG>(mat::HookStatus::InstallFailed)) {
+        } else if (reportedAndFinished &&
+                   (status == static_cast<LONG>(mat::HookStatus::ModuleMismatch) ||
+                    status == static_cast<LONG>(mat::HookStatus::InstallFailed))) {
             g_pendingPid = 0;
-            std::wstring unloadError;
-            const bool unloaded = mat::UninjectLibrary(
-                pid, L"ScreenTabHook.dll", unloadError);
             InterlockedExchange(&g_state->symbolsReady, 0);
             g_nextResolveTick = status ==
-                static_cast<LONG>(mat::HookStatus::ModuleMismatch) || !unloaded
+                static_cast<LONG>(mat::HookStatus::ModuleMismatch)
                 ? kRetryOnExplorerRestart : now + kResolveRetryMs;
             const std::wstring reason = status ==
                 static_cast<LONG>(mat::HookStatus::ModuleMismatch)
                 ? L"Explorer loaded a different Windows shell image. Restart Explorer or Windows"
                 : L"Explorer could not install the Alt+Tab hooks";
-            ReportProblem(hwnd, unloaded ? reason : reason + L". " + unloadError,
+            ReportProblem(hwnd, reason, L"Hook unavailable");
+        } else if (!g_pendingTimedOut &&
+                   now - g_pendingSince >= kHookStartupTimeoutMs) {
+            g_pendingTimedOut = true;
+            InterlockedExchange(&g_state->enabled, 0);
+            ReportProblem(hwnd,
+                          L"Hook startup did not finish. Restart Explorer or Windows",
                           L"Hook unavailable");
         } else if (!g_pendingWarned &&
                    now - g_pendingSince >= kHookStartWarningMs) {
@@ -205,20 +229,24 @@ void EnsureInjected(HWND hwnd) {
     if (now < g_nextResolveTick) return;
 
     g_state->explorerPid = pid;
+    g_state->hookInitThreadId = 0;
     InterlockedExchange(&g_state->hookStatus,
                         static_cast<LONG>(mat::HookStatus::Pending));
     std::wstring error;
     const auto dll = mat::GetExecutableDirectory() / L"ScreenTabHook.dll";
-    if (mat::InjectLibrary(pid, dll, error)) {
+    const auto injection = mat::InjectLibrary(pid, dll, error);
+    if (injection != mat::InjectionResult::Failed) {
         g_pendingPid = pid;
-        g_pendingSince = now;
+        g_pendingSince = GetTickCount64();
         g_pendingWarned = false;
-        SetTrayStatus(hwnd, L"Starting hook");
+        g_pendingTimedOut = false;
+        SetTrayStatus(hwnd, injection == mat::InjectionResult::Pending
+                                ? L"Waiting for Explorer to load hook"
+                                : L"Starting hook");
     } else {
         InterlockedExchange(&g_state->symbolsReady, 0);
-        g_nextResolveTick = kRetryOnExplorerRestart;
-        ReportProblem(hwnd, error + L". Restart Explorer or Windows to retry",
-                      L"Hook unavailable");
+        g_nextResolveTick = GetTickCount64() + kResolveRetryMs;
+        ReportProblem(hwnd, error, L"Hook unavailable");
     }
 }
 
@@ -381,14 +409,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         const DWORD pid = g_activePid ? g_activePid : g_pendingPid;
         if (g_pendingPid) {
             const ULONGLONG deadline = GetTickCount64() + 5000;
-            while (InterlockedCompareExchange(&g_state->hookStatus, 0, 0) ==
-                       static_cast<LONG>(mat::HookStatus::Pending) &&
-                   GetTickCount64() < deadline) {
+            while (GetTickCount64() < deadline &&
+                   !HookInitThreadFinished(pid)) {
                 Sleep(25);
             }
         }
-        if (InterlockedCompareExchange(&g_state->hookStatus, 0, 0) !=
-            static_cast<LONG>(mat::HookStatus::Pending)) {
+        const LONG status = InterlockedCompareExchange(&g_state->hookStatus, 0, 0);
+        if (g_activePid || (g_pendingPid &&
+            status == static_cast<LONG>(mat::HookStatus::Ready) &&
+            HookInitThreadFinished(pid))) {
             std::wstring unloadError;
             mat::UninjectLibrary(pid, L"ScreenTabHook.dll", unloadError);
         }

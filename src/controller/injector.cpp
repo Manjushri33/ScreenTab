@@ -3,6 +3,34 @@
 #include <vector>
 
 namespace mat {
+namespace {
+enum class ModuleLookup { Found, Missing, Error };
+
+ModuleLookup FindRemoteModule(DWORD pid, const std::wstring& moduleName,
+                              MODULEENTRY32W& out) {
+    HANDLE snapshot = CreateToolhelp32Snapshot(
+        TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+    if (snapshot == INVALID_HANDLE_VALUE) return ModuleLookup::Error;
+
+    MODULEENTRY32W entry{sizeof(entry)};
+    if (!Module32FirstW(snapshot, &entry)) {
+        CloseHandle(snapshot);
+        return ModuleLookup::Error;
+    }
+    do {
+        if (_wcsicmp(entry.szModule, moduleName.c_str()) == 0) {
+            out = entry;
+            CloseHandle(snapshot);
+            return ModuleLookup::Found;
+        }
+    } while (Module32NextW(snapshot, &entry));
+    const DWORD scanError = GetLastError();
+    CloseHandle(snapshot);
+    return scanError == ERROR_NO_MORE_FILES ? ModuleLookup::Missing
+                                             : ModuleLookup::Error;
+}
+}
+
 DWORD FindExplorerProcessId() {
     HWND shell = GetShellWindow();
     DWORD pid = 0;
@@ -10,13 +38,22 @@ DWORD FindExplorerProcessId() {
     return pid;
 }
 
-bool InjectLibrary(DWORD pid, const std::filesystem::path& dllPath, std::wstring& error) {
+InjectionResult InjectLibrary(DWORD pid, const std::filesystem::path& dllPath,
+                              std::wstring& error) {
+    MODULEENTRY32W existing{sizeof(existing)};
+    const auto lookup = FindRemoteModule(pid, L"ScreenTabHook.dll", existing);
+    if (lookup != ModuleLookup::Missing) {
+        error = lookup == ModuleLookup::Found
+            ? L"Explorer already contains ScreenTabHook.dll. Restart Explorer or Windows"
+            : L"Could not inspect Explorer modules before injection";
+        return InjectionResult::Failed;
+    }
     HANDLE process = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION |
                                  PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ,
                                  FALSE, pid);
     if (!process) {
         error = L"Could not open Explorer for injection";
-        return false;
+        return InjectionResult::Failed;
     }
 
     std::wstring full = std::filesystem::absolute(dllPath).wstring();
@@ -25,7 +62,7 @@ bool InjectLibrary(DWORD pid, const std::filesystem::path& dllPath, std::wstring
     if (!remote) {
         error = L"Could not allocate memory in Explorer";
         CloseHandle(process);
-        return false;
+        return InjectionResult::Failed;
     }
 
     bool ok = WriteProcessMemory(process, remote, full.c_str(), bytes, nullptr) != FALSE;
@@ -46,49 +83,43 @@ bool InjectLibrary(DWORD pid, const std::filesystem::path& dllPath, std::wstring
     if (wait == WAIT_OBJECT_0) VirtualFreeEx(process, remote, 0, MEM_RELEASE);
     CloseHandle(process);
 
-    if (!ok) error = L"Explorer did not load ScreenTabHook.dll";
-    return ok;
-}
-
-namespace {
-bool FindRemoteModule(DWORD pid, const std::wstring& moduleName, MODULEENTRY32W& out) {
-    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
-    if (snapshot == INVALID_HANDLE_VALUE) return false;
-
-    MODULEENTRY32W entry{sizeof(entry)};
-    bool found = false;
-    if (Module32FirstW(snapshot, &entry)) {
-        do {
-            if (_wcsicmp(entry.szModule, moduleName.c_str()) == 0) {
-                out = entry;
-                found = true;
-                break;
-            }
-        } while (Module32NextW(snapshot, &entry));
+    if (thread && wait != WAIT_OBJECT_0) {
+        error = L"Explorer is still loading ScreenTabHook.dll";
+        return InjectionResult::Pending;
     }
-    CloseHandle(snapshot);
-    return found;
-}
+    if (!ok) {
+        error = L"Explorer did not load ScreenTabHook.dll";
+        return InjectionResult::Failed;
+    }
+    return InjectionResult::Loaded;
 }
 
 bool UninjectLibrary(DWORD pid, const std::wstring& moduleName, std::wstring& error) {
     if (!pid) return true;
 
     MODULEENTRY32W remoteModule{sizeof(remoteModule)};
-    if (!FindRemoteModule(pid, moduleName, remoteModule)) {
-        return true;
+    const auto moduleLookup = FindRemoteModule(pid, moduleName, remoteModule);
+    if (moduleLookup == ModuleLookup::Missing) return true;
+    if (moduleLookup == ModuleLookup::Error) {
+        error = L"Could not inspect Explorer modules for hook unload";
+        return false;
     }
 
     MODULEENTRY32W remoteKernel32{sizeof(remoteKernel32)};
-    if (!FindRemoteModule(pid, L"kernel32.dll", remoteKernel32)) {
+    if (FindRemoteModule(pid, L"kernel32.dll", remoteKernel32) !=
+        ModuleLookup::Found) {
         error = L"Could not locate kernel32.dll in Explorer";
         return false;
     }
 
     HMODULE localKernel32 = GetModuleHandleW(L"kernel32.dll");
+    if (!localKernel32) {
+        error = L"Could not locate kernel32.dll locally";
+        return false;
+    }
     auto localFreeLibrary = reinterpret_cast<std::uintptr_t>(
         GetProcAddress(localKernel32, "FreeLibrary"));
-    if (!localKernel32 || !localFreeLibrary) {
+    if (!localFreeLibrary) {
         error = L"Could not locate FreeLibrary";
         return false;
     }
@@ -121,6 +152,14 @@ bool UninjectLibrary(DWORD pid, const std::wstring& moduleName, std::wstring& er
 
     if (wait != WAIT_OBJECT_0 || exitCode == 0) {
         error = L"Explorer did not unload ScreenTabHook.dll";
+        return false;
+    }
+    MODULEENTRY32W remaining{sizeof(remaining)};
+    const auto after = FindRemoteModule(pid, moduleName, remaining);
+    if (after != ModuleLookup::Missing) {
+        error = after == ModuleLookup::Found
+            ? L"ScreenTabHook.dll remains loaded in Explorer"
+            : L"Could not verify ScreenTabHook.dll was unloaded";
         return false;
     }
     return true;

@@ -11,6 +11,7 @@ void ReportHookStatus(mat::HookStatus status) {
     if (state) {
         if (state->protocolVersion == mat::kProtocolVersion &&
             state->explorerPid == GetCurrentProcessId()) {
+            state->hookInitThreadId = GetCurrentThreadId();
             InterlockedExchange(&state->hookStatus, static_cast<LONG>(status));
         }
         UnmapViewOfFile(state);
@@ -18,8 +19,11 @@ void ReportHookStatus(mat::HookStatus status) {
     CloseHandle(mapping);
 }
 
-DWORD WINAPI InitThread(void*) {
-    ReportHookStatus(InitializeAltTabHooks());
+DWORD WINAPI InitThread(void* context) {
+    const auto status = InitializeAltTabHooks();
+    ReportHookStatus(status);
+    if (status != mat::HookStatus::Ready)
+        FreeLibraryAndExitThread(static_cast<HMODULE>(context), 0);
     return 0;
 }
 }
@@ -27,7 +31,7 @@ DWORD WINAPI InitThread(void*) {
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(instance);
-        HANDLE thread=CreateThread(nullptr,0,InitThread,nullptr,0,nullptr);
+        HANDLE thread=CreateThread(nullptr,0,InitThread,instance,0,nullptr);
         if(thread) CloseHandle(thread);
     } else if (reason == DLL_PROCESS_DETACH) {
         ShutdownAltTabHooks();

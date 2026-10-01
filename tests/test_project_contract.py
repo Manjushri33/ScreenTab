@@ -123,6 +123,26 @@ class ProjectContractTests(unittest.TestCase):
         self.assertIn('wait == WAIT_OBJECT_0', injector)
         self.assertIn('if (wait == WAIT_OBJECT_0) VirtualFreeEx', injector)
 
+    def test_uncertain_injection_is_tracked_and_stale_dll_is_not_reloaded(self):
+        controller = self.read('src/controller/controller.h')
+        injector = self.read('src/controller/injector.cpp')
+        main = self.read('src/controller/main.cpp')
+        self.assertIn('enum class InjectionResult', controller)
+        self.assertIn('InjectionResult::Pending', injector)
+        self.assertIn('InjectionResult::Pending', main)
+        self.assertIn('ModuleLookup::Found', injector)
+        self.assertIn('ModuleLookup::Error', injector)
+        self.assertIn('kHookStartupTimeoutMs', main)
+
+    def test_hook_handshake_waits_for_init_thread_to_exit(self):
+        protocol = self.read('src/common/protocol.h')
+        dllmain = self.read('src/hook/dllmain.cpp')
+        main = self.read('src/controller/main.cpp')
+        self.assertIn('hookInitThreadId', protocol)
+        self.assertIn('hookInitThreadId', dllmain)
+        self.assertIn('HookInitThreadFinished', main)
+        self.assertIn('FreeLibraryAndExitThread', dllmain)
+
     def test_tray_icon_returns_after_explorer_restart(self):
         main = self.read('src/controller/main.cpp')
         self.assertIn('RegisterWindowMessageW(L"TaskbarCreated")', main)
