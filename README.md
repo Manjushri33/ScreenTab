@@ -1,93 +1,81 @@
 <div align="center">
-  <img src="assets/app-icon.png?v=3" alt="ScreenTab icon" width="160" />
+  <img src="assets/app-icon.png" alt="ScreenTab icon" width="144" />
 
 # ScreenTab
 
-**Alt+Tab for the screen you're actually using.**
+**The native Windows 11 Alt+Tab switcher, focused on your current monitor.**
 
-ScreenTab is a small open-source Windows 11 utility that keeps the native Alt+Tab interface and thumbnails while showing only windows that belong to the monitor you're currently working on.
+ScreenTab shows windows from the monitor you're using while keeping Windows' own Alt+Tab interface and thumbnails.
+
+[Download the latest release](https://github.com/Manjushri33/ScreenTab/releases/latest) · [Report a problem](https://github.com/Manjushri33/ScreenTab/issues/new) · [How it works](docs/ARCHITECTURE.md)
 
 [![Build](https://github.com/Manjushri33/ScreenTab/actions/workflows/build.yml/badge.svg)](https://github.com/Manjushri33/ScreenTab/actions/workflows/build.yml)
-
 </div>
 
-## Features
+![Illustration: Alt+Tab shows windows on the active monitor](assets/how-it-works.svg)
 
-- Native Windows 11 Alt+Tab UI and live thumbnails.
-- Only windows from the active monitor.
-- Alt+Tab switcher follows the active monitor.
-- Repeated and rapid Alt+Tab switching.
-- `Win + Tab` / Task View stays unchanged.
-- Small system-tray controller with **Pause**, **Start with Windows**, **About**, and **Exit**.
-- Automatically reconnects after Explorer restarts.
-- Rechecks the Windows shell image and symbols before reconnecting after an Explorer restart.
-- Shows hook startup and recovery status in the system-tray menu.
+*Illustration only. ScreenTab uses the actual Windows Alt+Tab interface.*
 
-## Install
+## What it does
 
-### Installer — recommended
+- Shows Alt+Tab windows from the monitor with the active window. If there is no suitable active window, it uses the monitor under the pointer.
+- Keeps the native Windows 11 switcher, thumbnails, and keyboard behavior.
+- Leaves `Win + Tab` / Task View unchanged.
+- Offers **Pause**, **Start with Windows**, status, and **Exit** from the system tray.
+- Reconnects after Explorer restarts and checks the installed Windows shell before hooking it.
 
-1. Open **Releases** and download `ScreenTab-Setup.exe` from the latest validated release.
-2. Run the installer.
-3. Choose the installation folder if you don't want the default `C:\Program Files\ScreenTab` location.
-4. Leave **Start ScreenTab with Windows** enabled if you want ScreenTab to start automatically.
-5. Leave **Launch ScreenTab** enabled to start it after installation.
+## Download and install
 
-If Windows SmartScreen appears because an early build is not code-signed, use **More info → Run anyway** only when the file came from this repository's official Releases page.
+ScreenTab supports **Windows 11 x64** with the standard Windows Alt+Tab switcher. Open the [latest release](https://github.com/Manjushri33/ScreenTab/releases/latest) and choose one of these files:
 
-ScreenTab appears in **Windows Settings → Apps → Installed apps**, where it can be uninstalled normally.
+| File | Use it when |
+| --- | --- |
+| `ScreenTab-Setup.exe` | You want normal installation, an Installed Apps entry, and an optional Windows startup setting. |
+| `ScreenTab-windows-x64.zip` | You want a portable copy. Extract the whole ZIP to a permanent folder, then run `ScreenTab.exe`. Keep the included DLLs beside it. |
 
-### Portable
+The release also contains a `.sha256` file for each download. ScreenTab is not code signed; Windows SmartScreen may show a warning. Check that the file came from this repository's Releases page before choosing **More info → Run anyway**.
 
-Download `ScreenTab-windows-x64.zip`, extract it to a permanent folder, keep all included DLLs beside `ScreenTab.exe`, and run `ScreenTab.exe`.
+On first launch, and after some Windows updates, ScreenTab needs an internet connection to download the matching public Microsoft symbols. It may take a moment before the tray menu says **Status: Working**. If the symbols are temporarily unavailable, ordinary Alt+Tab continues to work and ScreenTab retries.
 
-Portable mode does not create an Installed Apps entry. Use the tray menu's **Start with Windows** option if you want autostart.
+**Updating from v0.1.0:** Install the new setup file over the existing installation. For a portable copy, exit the old app, replace the entire extracted folder, and start the new `ScreenTab.exe`. Keep all files from the same release together.
 
-## Use
+## Use and status
 
-Use `Alt + Tab` normally. ScreenTab keeps the native Windows switcher but filters it to the monitor you're currently using.
+Press `Alt + Tab` as usual. Right-click the ScreenTab tray icon to see its status and controls:
 
-Right-click the tray icon for:
+| Tray item or status | Meaning |
+| --- | --- |
+| **Status: Working** | Filtering is active. |
+| **Checking Windows symbols** / **Starting hook** | ScreenTab is preparing the Windows shell connection. |
+| **Waiting to retry** | A temporary symbol or hook error occurred; ScreenTab will try again. |
+| **Waiting for Explorer** | Explorer is starting or restarting. |
+| **Pause** | Temporarily use ordinary Alt+Tab; select the checked **Pause** item again to resume filtering. |
+| **Start with Windows** | Turn automatic startup on or off. |
+| **Exit** | Close ScreenTab and restore ordinary Alt+Tab. |
 
-- **Pause** — temporarily restore standard Alt+Tab behavior.
-- **Start with Windows** — toggle automatic startup.
-- **About** — show version information.
-- **Exit** — close ScreenTab and restore standard Alt+Tab.
+The tray icon's **About** item shows the app version. Its status item provides more detail when a problem occurs.
+
+## Compatibility and troubleshooting
+
+ScreenTab changes an internal Explorer path because Windows does not provide a public API to filter its native Alt+Tab list by monitor. Windows updates can change that path. ScreenTab resolves symbols for the installed Windows build and checks the loaded shell image before enabling its hook. If those checks fail, it leaves normal Alt+Tab available and reports the problem in the tray menu. Compatibility with every future Windows build cannot be guaranteed.
+
+If filtering is not active:
+
+1. Check the tray status and open its status item for details.
+2. Confirm that the PC is running Windows 11 x64 and can reach Microsoft's symbol server. First launch and some updates need this connection.
+3. Confirm that `ScreenTab.exe`, `ScreenTabHook.dll`, `dbghelp.dll`, `symsrv.dll`, and `msdia140.dll` came from the same release and are in the same folder. The installer places them together automatically.
+4. If you use ExplorerPatcher, a third-party task switcher, or another Explorer modification, try the standard Windows 11 switcher.
+5. If the issue persists, [open an issue](https://github.com/Manjushri33/ScreenTab/issues/new) with the tray status, Windows build (`winver`), monitor layout, and steps to reproduce it. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Windows 10, ARM64, legacy Alt+Tab modes, and third-party task switchers are outside the supported configuration.
 
 ## Uninstall
 
-For an installer build, open **Windows Settings → Apps → Installed apps → ScreenTab → Uninstall**. The uninstaller closes ScreenTab, removes its startup entry, unloads its Explorer hook, and removes the symbol cache.
-
-For portable mode, choose **Exit**, disable **Start with Windows** if it was enabled, and delete the extracted folder.
-
-## Requirements
-
-- Windows 11
-- x64 PC
-- Standard Windows 11 Alt+Tab
-- Internet access on first run and after Windows updates to obtain matching Microsoft symbols
-
-Windows 10, ARM64, old ExplorerPatcher Alt+Tab modes, and third-party task switchers are not targeted by the first release series.
-
-## How it works
-
-ScreenTab uses a small native controller plus a hook DLL loaded into the current user's Explorer process. It filters the Windows shell application-view visibility path only while Alt+Tab is being built, so Windows continues to draw its own switcher and thumbnails.
-
-Windows doesn't expose a supported public API for per-monitor native Alt+Tab filtering. ScreenTab therefore resolves the installed Windows build's shell symbols at runtime and **fails open**: if the required symbols can't be resolved, standard Alt+Tab remains unchanged.
-
-The portable ZIP and installer include Microsoft's DbgHelp symbol runtime. If the matching `twinui.pcshell.pdb` is unavailable from Microsoft's symbol server, ScreenTab leaves Alt+Tab unchanged, reports the problem from its tray icon, and retries automatically. When Explorer restarts, ScreenTab resolves the symbols again and checks that the loaded shell image matches before installing hooks.
-
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for technical details.
+For the installer, use **Windows Settings → Apps → Installed apps → ScreenTab → Uninstall**. For a portable copy, turn off **Start with Windows** if enabled, choose **Exit**, then delete the extracted folder.
 
 ## Build from source
 
-Requirements:
-
-- Windows 11 x64
-- Visual Studio 2022 with **Desktop development with C++**
-- CMake 3.24+
-- Python 3
-- Inno Setup 6
+You need Windows 11 x64, Visual Studio 2022 with **Desktop development with C++**, CMake 3.24+, Python 3, and internet access for the pinned Microsoft symbol runtime packages. Inno Setup 6 is needed only to build the installer.
 
 ```powershell
 python -m pip install pillow
@@ -95,32 +83,19 @@ python scripts/make_icon.py
 .\scripts\fetch_symbol_runtime.ps1
 cmake -S . -B build -A x64
 cmake --build build --config Release
+python -m unittest discover -s tests -v
 ```
 
-Build the installer with:
+The build output is in `build\Release`. To create the installer, run:
 
 ```powershell
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\ScreenTab.iss
 ```
 
-Or run:
+The runtime script downloads pinned Microsoft NuGet packages, verifies their SHA-256 hashes, and copies the x64 libraries into the build. For implementation details, see [the architecture notes](docs/ARCHITECTURE.md).
 
-```powershell
-.\scripts\build.ps1
-```
+## Contributing and credits
 
-The symbol runtime fetch script downloads pinned Microsoft NuGet packages, verifies their SHA-256 hashes, and places the x64 DLLs in `build\symbol-runtime` for CMake to package.
+Bug reports and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). The filtering strategy and relevant shell symbol names were informed by the open-source Windhawk **Alt+Tab per monitor** mod by L3r0y and Windhawk by Ramen Software. ScreenTab is a standalone implementation and does not require Windhawk. Third-party licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-## Contributing
-
-Bug reports are especially useful when they include the Windows 11 build number and exact reproduction steps. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
-
-## Credits
-
-The filtering strategy and relevant Windows shell symbol names were informed by the open-source Windhawk **Alt+Tab per monitor** mod by L3r0y and the Windhawk project by Ramen Software. ScreenTab is a separate standalone implementation and does not require Windhawk.
-
-Third-party licenses and notices are listed in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
-
-## License
-
-ScreenTab's own source is released under the [MIT License](LICENSE).
+ScreenTab's own source is available under the [MIT License](LICENSE). See [CHANGELOG.md](CHANGELOG.md) for release changes.
