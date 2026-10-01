@@ -13,6 +13,14 @@ The Alt+Tab filtering strategy and relevant Windows shell symbol names were info
 Windhawk: https://github.com/ramensoftware/windhawk
 Windhawk mods: https://github.com/ramensoftware/windhawk-mods
 
+## Microsoft Debugger Platform
+
+The binary distributions include `dbghelp.dll` and `msdia140.dll` from the Microsoft.Debugging.Platform.DbgEng NuGet package, and `symsrv.dll` from the Microsoft.Debugging.Platform.SymSrv NuGet package (version 20260319.1511.0). These Microsoft binaries are not part of ScreenTab's MIT-licensed source code.
+
+Packages: https://www.nuget.org/packages/Microsoft.Debugging.Platform.DbgEng and https://www.nuget.org/packages/Microsoft.Debugging.Platform.SymSrv
+
+Microsoft license terms: https://aka.ms/WinSDKLicenseURL
+
 ### MinHook 2-Clause BSD License
 
 Copyright (C) 2009-2017 Tsuda Kageyu.

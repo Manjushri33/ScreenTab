@@ -37,7 +37,7 @@ ScreenTab appears in **Windows Settings → Apps → Installed apps**, where it 
 
 ### Portable
 
-Download `ScreenTab-windows-x64.zip`, extract it to a permanent folder, keep `ScreenTab.exe` and `ScreenTabHook.dll` together, and run `ScreenTab.exe`.
+Download `ScreenTab-windows-x64.zip`, extract it to a permanent folder, keep all included DLLs beside `ScreenTab.exe`, and run `ScreenTab.exe`.
 
 Portable mode does not create an Installed Apps entry. Use the tray menu's **Start with Windows** option if you want autostart.
 
@@ -63,6 +63,7 @@ For portable mode, choose **Exit**, disable **Start with Windows** if it was ena
 - Windows 11
 - x64 PC
 - Standard Windows 11 Alt+Tab
+- Internet access on first run and after Windows updates to obtain matching Microsoft symbols
 
 Windows 10, ARM64, old ExplorerPatcher Alt+Tab modes, and third-party task switchers are not targeted by the first release series.
 
@@ -71,6 +72,8 @@ Windows 10, ARM64, old ExplorerPatcher Alt+Tab modes, and third-party task switc
 ScreenTab uses a small native controller plus a hook DLL loaded into the current user's Explorer process. It filters the Windows shell application-view visibility path only while Alt+Tab is being built, so Windows continues to draw its own switcher and thumbnails.
 
 Windows doesn't expose a supported public API for per-monitor native Alt+Tab filtering. ScreenTab therefore resolves the installed Windows build's shell symbols at runtime and **fails open**: if the required symbols can't be resolved, standard Alt+Tab remains unchanged.
+
+The portable ZIP and installer include Microsoft's DbgHelp symbol runtime. If the matching `twinui.pcshell.pdb` is unavailable from Microsoft's symbol server, ScreenTab leaves Alt+Tab unchanged and reports the problem from its tray icon.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for technical details.
 
@@ -87,6 +90,7 @@ Requirements:
 ```powershell
 python -m pip install pillow
 python scripts/make_icon.py
+.\scripts\fetch_symbol_runtime.ps1
 cmake -S . -B build -A x64
 cmake --build build --config Release
 ```
@@ -102,6 +106,8 @@ Or run:
 ```powershell
 .\scripts\build.ps1
 ```
+
+The symbol runtime fetch script downloads pinned Microsoft NuGet packages, verifies their SHA-256 hashes, and places the x64 DLLs in `build\symbol-runtime` for CMake to package.
 
 ## Contributing
 

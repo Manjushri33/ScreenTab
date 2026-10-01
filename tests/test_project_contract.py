@@ -82,17 +82,23 @@ class ProjectContractTests(unittest.TestCase):
         self.assertIn('CompanyName', version_rc)
         self.assertIn('Manjushri33', version_rc)
 
-    def test_symbol_resolver_matches_decorated_names_and_uses_targeted_fallback(self):
+    def test_symbol_resolver_requires_exact_public_pdb_symbols(self):
         text = self.read('src/controller/symbols.cpp')
-        self.assertIn('CWin32ApplicationView', text)
-        self.assertIn('IApplicationView', text)
-        self.assertIn('CVirtualDesktop', text)
-        self.assertIn('IsViewVisible', text)
-        self.assertIn('??_7', text)
-        self.assertIn('*CVirtualDesktop*', text)
-        self.assertIn('*CWin32ApplicationView*', text)
-        self.assertIn('ResolveMissingWithTargetedSearch', text)
+        self.assertIn('SYMOPT_PUBLICS_ONLY', text)
+        self.assertIn('SymGetModuleInfoW64', text)
+        self.assertIn('PdbUnmatched', text)
+        self.assertIn('??_7CWin32ApplicationView@@6BIApplicationView@@@', text)
+        self.assertIn('??_7CWinRTApplicationView@@6BIApplicationView@@@', text)
         self.assertIn('Missing symbols:', text)
+
+    def test_symbol_runtime_is_in_portable_and_installer_packages(self):
+        cmake = self.read('CMakeLists.txt')
+        workflow = self.read('.github/workflows/build.yml')
+        installer = self.read('installer/ScreenTab.iss')
+        for file in ('dbghelp.dll', 'symsrv.dll', 'msdia140.dll'):
+            self.assertIn(file, cmake)
+            self.assertIn(file, workflow)
+            self.assertIn(file, installer)
 
 if __name__ == '__main__':
     unittest.main()

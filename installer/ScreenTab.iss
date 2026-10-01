@@ -38,6 +38,10 @@ CloseApplicationsFilter=ScreenTab.exe
 [Files]
 Source: "..\build\Release\ScreenTab.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\Release\ScreenTabHook.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\build\Release\dbghelp.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\build\Release\symsrv.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\build\Release\msdia140.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Tasks]
 Name: "startup"; Description: "Start ScreenTab with Windows"; GroupDescription: "Startup:"; Flags: checkedonce
