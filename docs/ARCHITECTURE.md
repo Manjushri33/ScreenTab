@@ -9,9 +9,11 @@ ScreenTab keeps the native Windows 11 Alt+Tab experience and filters the shell's
 The tray/controller process:
 
 - owns the tray menu and startup preference;
-- resolves the private Windows shell symbol RVAs needed by the hook;
+- downloads the matching public Microsoft PDB and resolves the shell symbol RVAs needed by the hook;
 - injects `ScreenTabHook.dll` into the current user's Explorer process;
-- reconnects after Explorer restarts;
+- resolves symbols again and reconnects after Explorer restarts;
+- waits for the hook DLL to report that installation actually succeeded;
+- retries symbol resolution after temporary failures and shows persistent status in the tray menu;
 - fails open if the current Windows build can't be supported safely.
 
 ### `ScreenTabHook.dll`
@@ -30,7 +32,7 @@ Windows has no supported public API for “show the native Alt+Tab UI, but only 
 
 ## Compatibility
 
-The shell internals used by Windows can change between builds. ScreenTab resolves symbols for the installed `twinui.pcshell.dll` at runtime instead of using hard-coded offsets. If resolution fails, the hook is not installed and Windows keeps its normal Alt+Tab behavior.
+The shell internals used by Windows can change between builds. ScreenTab resolves symbols for the installed `twinui.pcshell.dll` at runtime instead of using hard-coded offsets. The installer and portable ZIP include Microsoft's x64 DbgHelp, SymSrv, and DIA libraries because the DbgHelp copy built into Windows does not support the symbol server. The resolver uses exact public PDB symbol names and checks that a matching PDB loaded before sharing RVAs with Explorer. On each Explorer process change, the controller resolves the symbols again; the hook compares the loaded image's timestamp, image size, and checksum with the resolved image. The controller treats the hook as working only after the DLL reports successful installation. If resolution or hook installation fails, Windows keeps its normal Alt+Tab behavior and the tray menu shows the recovery status.
 
 ## Credits
 

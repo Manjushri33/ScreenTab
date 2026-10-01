@@ -107,6 +107,21 @@ bool RvaIsInImage(std::uint64_t rva) {
     return rva < nt->OptionalHeader.SizeOfImage;
 }
 
+bool ModuleMatchesResolvedImage() {
+    if (!g_twinui || !g_state) return false;
+    auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(g_twinui);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0) return false;
+    auto* nt = reinterpret_cast<IMAGE_NT_HEADERS64*>(
+        reinterpret_cast<std::byte*>(g_twinui) + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE ||
+        nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC) return false;
+    const auto& expected = g_state->moduleIdentity;
+    return expected.imageSize != 0 &&
+           nt->FileHeader.TimeDateStamp == expected.timeDateStamp &&
+           nt->OptionalHeader.SizeOfImage == expected.imageSize &&
+           nt->OptionalHeader.CheckSum == expected.checkSum;
+}
+
 template<class T>
 bool HookAt(std::uint64_t rva, void* hook, T* original) {
     if(!RvaIsInImage(rva)) return false;
@@ -115,19 +130,26 @@ bool HookAt(std::uint64_t rva, void* hook, T* original) {
 }
 }
 
-bool InitializeAltTabHooks() {
+mat::HookStatus InitializeAltTabHooks() {
     g_mapping=OpenFileMappingW(FILE_MAP_ALL_ACCESS,FALSE,mat::kSharedMappingName);
-    if(!g_mapping) return false;
+    if(!g_mapping) return mat::HookStatus::InstallFailed;
     g_state=static_cast<mat::SharedState*>(MapViewOfFile(g_mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(mat::SharedState)));
-    if(!g_state || !g_state->symbolsReady) return false;
+    if(!g_state || g_state->protocolVersion != mat::kProtocolVersion ||
+       !g_state->symbolsReady || g_state->explorerPid != GetCurrentProcessId())
+        return mat::HookStatus::InstallFailed;
     g_twinui=GetModuleHandleW(L"twinui.pcshell.dll");
     if(!g_twinui) g_twinui=LoadLibraryExW(L"twinui.pcshell.dll",nullptr,LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if(!g_twinui || MH_Initialize()!=MH_OK) return false;
+    if(!g_twinui) return mat::HookStatus::InstallFailed;
+    if(!ModuleMatchesResolvedImage()) return mat::HookStatus::ModuleMismatch;
+    if(MH_Initialize()!=MH_OK) return mat::HookStatus::InstallFailed;
 
     auto base=reinterpret_cast<std::uintptr_t>(g_twinui);
     const auto& s=g_state->symbols;
     if(!RvaIsInImage(s.win32ViewVtable) || !RvaIsInImage(s.win32GetNativeWindow) ||
-       !RvaIsInImage(s.winrtViewVtable) || !RvaIsInImage(s.winrtGetNativeWindow)) return false;
+       !RvaIsInImage(s.winrtViewVtable) || !RvaIsInImage(s.winrtGetNativeWindow)) {
+        MH_Uninitialize();
+        return mat::HookStatus::InstallFailed;
+    }
     g_win32Vtable=reinterpret_cast<void*>(base+s.win32ViewVtable);
     g_winrtVtable=reinterpret_cast<void*>(base+s.winrtViewVtable);
     g_win32GetNativeWindow=reinterpret_cast<GetNativeWindowFn>(base+s.win32GetNativeWindow);
@@ -138,12 +160,14 @@ bool InitializeAltTabHooks() {
     ok &= HookAt(s.xamlAltTabShow,reinterpret_cast<void*>(XamlAltTabViewHost_Show_Hook),&g_showOriginal);
     ok &= HookAt(s.taskGroupPosition,reinterpret_cast<void*>(TaskGroupPosition_Hook),&g_positionOriginal);
     ok &= HookAt(s.xamlAltTabCreateInstance,reinterpret_cast<void*>(XamlAltTabViewHost_CreateInstance_Hook),&g_createOriginal);
-    if(!ok || MH_EnableHook(MH_ALL_HOOKS)!=MH_OK) { MH_Uninitialize(); return false; }
-    return true;
+    if(!ok || MH_EnableHook(MH_ALL_HOOKS)!=MH_OK) {
+        MH_Uninitialize();
+        return mat::HookStatus::InstallFailed;
+    }
+    return mat::HookStatus::Ready;
 }
 
 void ShutdownAltTabHooks() {
-    if(g_state) InterlockedExchange(&g_state->enabled,0);
     MH_DisableHook(MH_ALL_HOOKS); MH_Uninitialize();
     if(g_state){UnmapViewOfFile(g_state);g_state=nullptr;}
     if(g_mapping){CloseHandle(g_mapping);g_mapping=nullptr;}

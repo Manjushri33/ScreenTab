@@ -1,7 +1,6 @@
 #include "controller/controller.h"
 #include <dbghelp.h>
 #include <windows.h>
-#include <array>
 #include <filesystem>
 #include <sstream>
 #include <string>
@@ -13,129 +12,61 @@ namespace mat {
 namespace {
 struct Wanted {
     const wchar_t* label;
-    const wchar_t* token1;
-    const wchar_t* token2;
-    const wchar_t* token3;
+    const wchar_t* decoratedName;
     std::uint64_t SymbolOffsets::* member;
 };
 
-// DbgHelp can return either undecorated names or raw MSVC decorated names.
-// Match stable identifiers which survive both forms instead of relying on one
-// exact demangled spelling.
+// Public PDB names include the complete signature and interface-specific
+// vtable name. Partial names can match compiler-generated dtor$ symbols.
 constexpr Wanted kWanted[] = {
-    {L"CVirtualDesktop::IsViewVisible", L"CVirtualDesktop", L"IsViewVisible", nullptr,
+    {L"CVirtualDesktop::IsViewVisible",
+     L"?IsViewVisible@CVirtualDesktop@@UEAAJPEAUIApplicationView@@PEAH@Z",
      &SymbolOffsets::virtualDesktopIsViewVisible},
     {L"CWin32ApplicationView IApplicationView vtable",
-     L"CWin32ApplicationView", L"IApplicationView", nullptr,
+     L"??_7CWin32ApplicationView@@6BIApplicationView@@@",
      &SymbolOffsets::win32ViewVtable},
     {L"CWin32ApplicationView::v_GetNativeWindow",
-     L"CWin32ApplicationView", L"v_GetNativeWindow", nullptr,
+     L"?v_GetNativeWindow@CWin32ApplicationView@@EEAAJPEAPEAUHWND__@@@Z",
      &SymbolOffsets::win32GetNativeWindow},
     {L"CWinRTApplicationView IApplicationView vtable",
-     L"CWinRTApplicationView", L"IApplicationView", nullptr,
+     L"??_7CWinRTApplicationView@@6BIApplicationView@@@",
      &SymbolOffsets::winrtViewVtable},
     {L"CWinRTApplicationView::v_GetNativeWindow",
-     L"CWinRTApplicationView", L"v_GetNativeWindow", nullptr,
+     L"?v_GetNativeWindow@CWinRTApplicationView@@EEAAJPEAPEAUHWND__@@@Z",
      &SymbolOffsets::winrtGetNativeWindow},
-    {L"XamlAltTabViewHost::Show", L"XamlAltTabViewHost", L"Show", nullptr,
+    {L"XamlAltTabViewHost::Show",
+     L"?Show@XamlAltTabViewHost@@UEAAJPEAUIImmersiveMonitor@@W4ALT_TAB_VIEW_FLAGS@@PEAUIApplicationView@@@Z",
      &SymbolOffsets::xamlAltTabShow},
-    {L"ITaskGroupWindowInformation::Position", L"ITaskGroupWindowInformation", L"Position", nullptr,
+    {L"ITaskGroupWindowInformation::Position",
+     L"?Position@?$consume_Windows_Internal_Shell_TaskGroups_ITaskGroupWindowInformation@UITaskGroupWindowInformation@TaskGroups@Shell@Internal@Windows@winrt@@@impl@winrt@@QEBA@AEBURect@Foundation@Windows@3@@Z",
      &SymbolOffsets::taskGroupPosition},
-    {L"XamlAltTabViewHost_CreateInstance", L"XamlAltTabViewHost_CreateInstance", nullptr, nullptr,
+    {L"XamlAltTabViewHost_CreateInstance",
+     L"?XamlAltTabViewHost_CreateInstance@@YAJAEBUXamlViewHostInitializeArgs@@AEBU_GUID@@PEAPEAX@Z",
      &SymbolOffsets::xamlAltTabCreateInstance},
 };
-
-constexpr wchar_t kVirtualDesktopMask[] = L"*CVirtualDesktop*";
-constexpr wchar_t kWin32ApplicationViewMask[] = L"*CWin32ApplicationView*";
 
 struct EnumContext {
     DWORD64 base{};
     SymbolOffsets* offsets{};
+    bool duplicate{};
+    bool invalidAddress{};
 };
-
-bool Contains(std::wstring_view name, const wchar_t* token) {
-    return !token || name.find(token) != std::wstring_view::npos;
-}
-
-bool LooksLikeVtable(std::wstring_view name) {
-    // Undecorated DbgHelp form contains `vftable'. Raw MSVC decoration starts
-    // with ??_7. Keep both so the resolver works across PDB/DbgHelp versions.
-    return name.find(L"`vftable'") != std::wstring_view::npos ||
-           name.find(L"??_7") != std::wstring_view::npos;
-}
-
-bool Matches(std::wstring_view name, const Wanted& wanted) {
-    if (!Contains(name, wanted.token1) || !Contains(name, wanted.token2) ||
-        !Contains(name, wanted.token3)) {
-        return false;
-    }
-
-    if (wanted.member == &SymbolOffsets::win32ViewVtable ||
-        wanted.member == &SymbolOffsets::winrtViewVtable) {
-        return LooksLikeVtable(name);
-    }
-
-    return true;
-}
 
 BOOL CALLBACK EnumSymbols(PSYMBOL_INFOW info, ULONG, PVOID user) {
     auto* ctx = static_cast<EnumContext*>(user);
-    std::wstring_view name(info->Name, info->NameLen);
+    const std::wstring_view name(info->Name);
     for (const auto& wanted : kWanted) {
-        auto& slot = ctx->offsets->*(wanted.member);
-        if (slot != 0) continue;
-        if (Matches(name, wanted)) {
-            slot = info->Address - ctx->base;
+        if (name != wanted.decoratedName) continue;
+        if (info->Address <= ctx->base) {
+            ctx->invalidAddress = true;
+            continue;
         }
+        const std::uint64_t rva = info->Address - ctx->base;
+        auto& slot = ctx->offsets->*(wanted.member);
+        if (slot != 0 && slot != rva) ctx->duplicate = true;
+        else slot = rva;
     }
     return TRUE;
-}
-
-struct TargetedContext {
-    DWORD64 base{};
-    const Wanted* wanted{};
-    std::uint64_t* slot{};
-};
-
-BOOL CALLBACK EnumTargetedSymbol(PSYMBOL_INFOW info, ULONG, PVOID user) {
-    auto* ctx = static_cast<TargetedContext*>(user);
-    if (*ctx->slot != 0) return FALSE;
-
-    std::wstring_view name(info->Name, info->NameLen);
-    if (Matches(name, *ctx->wanted)) {
-        *ctx->slot = info->Address - ctx->base;
-        return FALSE;
-    }
-    return TRUE;
-}
-
-std::wstring TargetMask(const Wanted& wanted) {
-    if (wanted.member == &SymbolOffsets::virtualDesktopIsViewVisible) {
-        return kVirtualDesktopMask;
-    }
-    if (wanted.member == &SymbolOffsets::win32ViewVtable ||
-        wanted.member == &SymbolOffsets::win32GetNativeWindow) {
-        return kWin32ApplicationViewMask;
-    }
-
-    std::wstring mask = L"*";
-    mask += wanted.token1;
-    mask += L"*";
-    return mask;
-}
-
-void ResolveMissingWithTargetedSearch(HANDLE process, DWORD64 base,
-                                      SymbolOffsets& offsets) {
-    for (const auto& wanted : kWanted) {
-        auto& slot = offsets.*(wanted.member);
-        if (slot != 0) continue;
-
-        // Search raw/decorated symbols by their stable class or function token.
-        // Examples include ??_7CWin32ApplicationView... for vtables.
-        const std::wstring mask = TargetMask(wanted);
-        TargetedContext ctx{base, &wanted, &slot};
-        SymEnumSymbolsW(process, base, mask.c_str(), EnumTargetedSymbol, &ctx);
-    }
 }
 
 bool Complete(const SymbolOffsets& s) {
@@ -156,58 +87,118 @@ std::wstring MissingSymbols(const SymbolOffsets& offsets) {
     }
     return stream.str();
 }
+
+bool CheckSymbolRuntime(std::wstring& error) {
+    const auto appDirectory = GetExecutableDirectory();
+    for (const wchar_t* file : {L"dbghelp.dll", L"symsrv.dll", L"msdia140.dll"}) {
+        if (!std::filesystem::exists(appDirectory / file)) {
+            error = L"Symbol runtime is incomplete: ";
+            error += file;
+            error += L" is missing. Reinstall ScreenTab";
+            return false;
+        }
+    }
+    const HMODULE dbghelp = GetModuleHandleW(L"dbghelp.dll");
+    wchar_t loadedPath[MAX_PATH]{};
+    if (!dbghelp || !GetModuleFileNameW(dbghelp, loadedPath, MAX_PATH)) {
+        error = L"Could not identify the loaded DbgHelp library";
+        return false;
+    }
+    std::error_code ec;
+    if (!std::filesystem::equivalent(loadedPath, appDirectory / L"dbghelp.dll", ec)) {
+        error = L"ScreenTab loaded a different DbgHelp library";
+        return false;
+    }
+    return true;
+}
 }
 
-bool ResolveTwinuiSymbols(SymbolOffsets& out, std::wstring& error) {
+bool ResolveTwinuiSymbols(SymbolOffsets& out, ModuleIdentity& identity,
+                          std::wstring& error) {
     out = {};
+    identity = {};
+    error.clear();
+    if (!CheckSymbolRuntime(error)) return false;
 
     wchar_t systemDir[MAX_PATH]{};
     if (!GetSystemDirectoryW(systemDir, MAX_PATH)) {
         error = L"GetSystemDirectory failed";
         return false;
     }
-    std::filesystem::path modulePath = std::filesystem::path(systemDir) / L"twinui.pcshell.dll";
+    const auto modulePath = std::filesystem::path(systemDir) / L"twinui.pcshell.dll";
 
     HANDLE process = GetCurrentProcess();
-    SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS | SYMOPT_FAIL_CRITICAL_ERRORS);
+    SymSetOptions(SYMOPT_PUBLICS_ONLY | SYMOPT_DEFERRED_LOADS |
+                  SYMOPT_FAIL_CRITICAL_ERRORS);
 
     wchar_t localAppData[MAX_PATH]{};
-    ExpandEnvironmentStringsW(L"%LOCALAPPDATA%", localAppData, MAX_PATH);
-    auto cache = std::filesystem::path(localAppData) / L"ScreenTab" / L"symbols";
+    if (!ExpandEnvironmentStringsW(L"%LOCALAPPDATA%", localAppData, MAX_PATH)) {
+        error = L"Could not locate the symbol cache directory";
+        return false;
+    }
+    const auto cache = std::filesystem::path(localAppData) / L"ScreenTab" / L"symbols";
     std::error_code ec;
     std::filesystem::create_directories(cache, ec);
-    std::wstring symbolPath = L"srv*" + cache.wstring() + L"*https://msdl.microsoft.com/download/symbols";
+    if (ec) {
+        error = L"Could not create the symbol cache directory";
+        return false;
+    }
+    const std::wstring symbolPath =
+        L"srv*" + cache.wstring() + L"*https://msdl.microsoft.com/download/symbols";
 
     if (!SymInitializeW(process, symbolPath.c_str(), FALSE)) {
         error = L"Could not initialize Microsoft symbol resolver";
         return false;
     }
-
-    DWORD64 base = SymLoadModuleExW(process, nullptr, modulePath.c_str(), nullptr, 0, 0, nullptr, 0);
+    const DWORD64 base = SymLoadModuleExW(
+        process, nullptr, modulePath.c_str(), nullptr, 0, 0, nullptr, 0);
     if (!base) {
-        error = L"Microsoft symbols for twinui.pcshell.dll are unavailable for this Windows build";
+        error = L"Could not load twinui.pcshell.dll into the symbol resolver";
         SymCleanup(process);
         return false;
     }
 
     EnumContext ctx{base, &out};
     const BOOL enumerated = SymEnumSymbolsW(process, base, nullptr, EnumSymbols, &ctx);
+    const DWORD enumerationError = enumerated ? ERROR_SUCCESS : GetLastError();
 
-    if (enumerated && !Complete(out)) {
-        ResolveMissingWithTargetedSearch(process, base, out);
-    }
+    IMAGEHLP_MODULEW64 moduleInfo{};
+    moduleInfo.SizeOfStruct = sizeof(moduleInfo);
+    const BOOL hasModuleInfo = SymGetModuleInfoW64(process, base, &moduleInfo);
+    const bool hasPdb = hasModuleInfo &&
+        (moduleInfo.SymType == SymPdb || moduleInfo.SymType == SymDia) &&
+        !moduleInfo.PdbUnmatched;
 
-    if (!enumerated || !Complete(out)) {
-        error = L"Required Alt+Tab symbols were not found for this Windows build";
-        const auto missing = MissingSymbols(out);
-        if (!missing.empty()) error += L". Missing symbols: " + missing;
-        SymUnloadModule64(process, base);
-        SymCleanup(process);
-        return false;
+    if (!enumerated) {
+        error = L"Could not enumerate twinui.pcshell.dll symbols (error " +
+                std::to_wstring(enumerationError) + L")";
+    } else if (!hasPdb) {
+        error = L"Microsoft PDB for twinui.pcshell.dll was not loaded. "
+                L"Check the network connection and symbol server";
+    } else if (!moduleInfo.ImageSize) {
+        error = L"Could not identify the twinui.pcshell.dll image";
+    } else if (ctx.duplicate || ctx.invalidAddress) {
+        error = L"Ambiguous or invalid Alt+Tab symbol addresses for this Windows build";
+    } else if (!Complete(out)) {
+        error = L"Required Alt+Tab symbols were not found for this Windows build. "
+                L"Missing symbols: " + MissingSymbols(out);
+    } else {
+        for (const auto& wanted : kWanted) {
+            if (out.*(wanted.member) >= moduleInfo.ImageSize) {
+                error = L"Alt+Tab symbol address lies outside twinui.pcshell.dll";
+                break;
+            }
+        }
     }
 
     SymUnloadModule64(process, base);
     SymCleanup(process);
+    if (!error.empty()) {
+        out = {};
+        return false;
+    }
+    identity = {moduleInfo.TimeDateStamp, moduleInfo.ImageSize,
+                moduleInfo.CheckSum};
     return true;
 }
 }

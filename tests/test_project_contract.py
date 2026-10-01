@@ -82,17 +82,72 @@ class ProjectContractTests(unittest.TestCase):
         self.assertIn('CompanyName', version_rc)
         self.assertIn('Manjushri33', version_rc)
 
-    def test_symbol_resolver_matches_decorated_names_and_uses_targeted_fallback(self):
+    def test_symbol_resolver_requires_exact_public_pdb_symbols(self):
         text = self.read('src/controller/symbols.cpp')
-        self.assertIn('CWin32ApplicationView', text)
-        self.assertIn('IApplicationView', text)
-        self.assertIn('CVirtualDesktop', text)
-        self.assertIn('IsViewVisible', text)
-        self.assertIn('??_7', text)
-        self.assertIn('*CVirtualDesktop*', text)
-        self.assertIn('*CWin32ApplicationView*', text)
-        self.assertIn('ResolveMissingWithTargetedSearch', text)
+        self.assertIn('SYMOPT_PUBLICS_ONLY', text)
+        self.assertIn('SymGetModuleInfoW64', text)
+        self.assertIn('PdbUnmatched', text)
+        self.assertIn('??_7CWin32ApplicationView@@6BIApplicationView@@@', text)
+        self.assertIn('??_7CWinRTApplicationView@@6BIApplicationView@@@', text)
         self.assertIn('Missing symbols:', text)
+
+    def test_symbol_runtime_is_in_portable_and_installer_packages(self):
+        cmake = self.read('CMakeLists.txt')
+        workflow = self.read('.github/workflows/build.yml')
+        installer = self.read('installer/ScreenTab.iss')
+        for file in ('dbghelp.dll', 'symsrv.dll', 'msdia140.dll'):
+            self.assertIn(file, cmake)
+            self.assertIn(file, workflow)
+            self.assertIn(file, installer)
+
+    def test_hook_checks_resolved_module_identity_and_reports_readiness(self):
+        protocol = self.read('src/common/protocol.h')
+        hook = self.read('src/hook/alt_tab_hook.cpp')
+        dllmain = self.read('src/hook/dllmain.cpp')
+        self.assertIn('ModuleIdentity', protocol)
+        self.assertIn('hookStatus', protocol)
+        self.assertIn('ModuleMatchesResolvedImage', hook)
+        self.assertIn('ReportHookStatus', dllmain)
+        self.assertNotIn('InterlockedExchange(&g_state->enabled,0)', hook)
+
+    def test_controller_re_resolves_on_explorer_change_and_retries_failure(self):
+        main = self.read('src/controller/main.cpp')
+        self.assertIn('StartResolution', main)
+        self.assertIn('WM_RESOLVED', main)
+        self.assertIn('kResolveRetryMs', main)
+        self.assertIn('hookStatus', main)
+        self.assertIn('g_pendingPid', main)
+
+    def test_injector_does_not_free_remote_path_while_load_is_running(self):
+        injector = self.read('src/controller/injector.cpp')
+        self.assertIn('wait == WAIT_OBJECT_0', injector)
+        self.assertIn('if (wait == WAIT_OBJECT_0) VirtualFreeEx', injector)
+
+    def test_uncertain_injection_is_tracked_and_stale_dll_is_not_reloaded(self):
+        controller = self.read('src/controller/controller.h')
+        injector = self.read('src/controller/injector.cpp')
+        main = self.read('src/controller/main.cpp')
+        self.assertIn('enum class InjectionResult', controller)
+        self.assertIn('InjectionResult::Pending', injector)
+        self.assertIn('InjectionResult::Pending', main)
+        self.assertIn('ModuleLookup::Found', injector)
+        self.assertIn('ModuleLookup::Error', injector)
+        self.assertIn('kHookStartupTimeoutMs', main)
+
+    def test_hook_handshake_waits_for_init_thread_to_exit(self):
+        protocol = self.read('src/common/protocol.h')
+        dllmain = self.read('src/hook/dllmain.cpp')
+        main = self.read('src/controller/main.cpp')
+        self.assertIn('hookInitThreadId', protocol)
+        self.assertIn('hookInitThreadId', dllmain)
+        self.assertIn('HookInitThreadFinished', main)
+        self.assertIn('FreeLibraryAndExitThread', dllmain)
+        self.assertIn('if (!thread) return FALSE;', dllmain)
+
+    def test_tray_icon_returns_after_explorer_restart(self):
+        main = self.read('src/controller/main.cpp')
+        self.assertIn('RegisterWindowMessageW(L"TaskbarCreated")', main)
+        self.assertIn('AddTrayIcon(hwnd)', main)
 
 if __name__ == '__main__':
     unittest.main()

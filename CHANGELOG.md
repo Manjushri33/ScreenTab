@@ -1,0 +1,14 @@
+# Changelog
+
+## v0.1.1
+
+- Fix first-run symbol resolution by bundling the Microsoft DbgHelp, SymSrv, and DIA runtime with both downloads.
+- Require exact public symbol names and a matching PDB before installing the Alt+Tab hook.
+- Reconnect after Explorer restarts, recheck the shell image, and wait for the hook to report that it is ready.
+- Retry temporary symbol and hook failures and show recovery status in the tray menu.
+- Restore the tray icon when Explorer recreates the taskbar.
+
+## v0.1.0
+
+- Initial public release of native, per-monitor Windows 11 Alt+Tab filtering.
+- **Known issue:** The first release used the DbgHelp DLL supplied with Windows, which cannot fetch symbols from Microsoft's symbol server in this setup. Use v0.1.1 or later.
