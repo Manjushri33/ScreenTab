@@ -64,6 +64,10 @@ jobs:
         shell: powershell
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\ScreenTab.iss'
 
+      - name: Test installer update interface
+        shell: powershell
+        run: python scripts/test_installer.py --iscc "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+
       - name: Create installer SHA-256 checksum
         shell: powershell
         run: |

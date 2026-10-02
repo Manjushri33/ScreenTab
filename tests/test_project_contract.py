@@ -54,7 +54,7 @@ class ProjectContractTests(unittest.TestCase):
     def test_installer_is_registered_customizable_and_branded(self):
         text = self.read('installer/ScreenTab.iss')
         for expected in [
-            '#define MyAppVersion "0.1.2"',
+            '#define MyAppVersion "0.1.3"',
             '#define MyAppPublisher "Manjushri33"',
             '#define MyAppURL "https://github.com/Manjushri33/ScreenTab"',
             'AppPublisher={#MyAppPublisher}',
@@ -75,7 +75,7 @@ class ProjectContractTests(unittest.TestCase):
     def test_version_metadata_is_embedded(self):
         cmake = self.read('CMakeLists.txt')
         version_rc = self.read('src/controller/version.rc.in')
-        self.assertIn('project(ScreenTab VERSION 0.1.2', cmake)
+        self.assertIn('project(ScreenTab VERSION 0.1.3', cmake)
         self.assertIn('configure_file(', cmake)
         self.assertIn('FileDescription', version_rc)
         self.assertIn('ScreenTab', version_rc)

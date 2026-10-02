@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(ScreenTab VERSION 0.1.2 LANGUAGES CXX)
+project(ScreenTab VERSION 0.1.3 LANGUAGES CXX)
 
 if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
   message(FATAL_ERROR "ScreenTab v0.1 supports Windows 11 x64 only")
