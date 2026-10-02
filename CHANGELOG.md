@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.4
+
+- Open existing installations directly at update confirmation, with the installed/new versions and Update button visible on the first screen.
+- Skip destination, start-menu, and startup selection during update/reinstall/downgrade, retaining the registered installation folder and current Start with Windows state.
+- Test the actual first wizard page for existing and fresh installations, including enabled and disabled startup settings.
+
 ## v0.1.3
 
 - Show Update and the installed/incoming versions throughout the installer when ScreenTab is already installed.

@@ -37,7 +37,7 @@ The release also contains a `.sha256` file for each download. ScreenTab is not c
 
 On first launch, and after some Windows updates, ScreenTab needs an internet connection to download the matching public Microsoft symbols. It may take a moment before the tray menu says **Status: Working**. If the symbols are temporarily unavailable, ordinary Alt+Tab continues to work and ScreenTab retries.
 
-**Updating an existing installation:** Run the new setup file. From v0.1.3, the installer shows **Update**, the installed and incoming versions, and an **Update** confirmation button. Keep the existing installation folder; there is no need to uninstall first. Installing the same version shows **Reinstall**. For a portable copy, exit the old app, replace the entire extracted folder, and start the new `ScreenTab.exe`. Keep all files from the same release together.
+**Updating an existing installation:** Run the new setup file. From v0.1.4, an existing installation opens directly at **Ready to Update**, showing the installed and incoming versions and an **Update** button. The existing folder and current **Start with Windows** setting are retained automatically; there is no need to uninstall first. Installing the same version shows **Reinstall**. New installations keep the usual folder and startup choices. For a portable copy, exit the old app, replace the entire extracted folder, and start the new `ScreenTab.exe`. Keep all files from the same release together.
 
 **v0.1.2 fixes incorrect monitor selection when File Explorer is not open.** Windows can focus a hidden shell window before opening Alt+Tab; ScreenTab now ignores that window and uses the monitor under the pointer.
 

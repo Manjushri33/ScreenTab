@@ -1,5 +1,5 @@
 #define MyAppName "ScreenTab"
-#define MyAppVersion "0.1.3"
+#define MyAppVersion "0.1.4"
 #define MyAppPublisher "Manjushri33"
 #define MyAppURL "https://github.com/Manjushri33/ScreenTab"
 #define MyAppExeName "ScreenTab.exe"
@@ -12,7 +12,7 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
 AppUpdatesURL={#MyAppURL}/releases
-VersionInfoVersion=0.1.3.0
+VersionInfoVersion=0.1.4.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription=ScreenTab installer
 VersionInfoProductName={#MyAppName}
@@ -74,9 +74,9 @@ ExistingVersion=ScreenTab %1 is already installed.
 ExistingUnknownVersion=ScreenTab is already installed.
 MaintenanceWelcome=%1%n%nThis wizard will %2 ScreenTab to version %3.%n%nThe running app will be closed before its files are replaced.
 MaintenanceReadyTitle=Ready to %1
-MaintenanceReadyDescription=Review the version change and installation settings.
 MaintenanceReadyInstructions=Click %1 to %2 ScreenTab to version %3.
 VersionChange=Version: %1 -> %2
+MaintenanceVersionDescription=Installed version: %1. New version: %2.
 UnknownVersionChange=Target version: %1
 MaintenanceProgressDescription=Please wait while the ScreenTab files are replaced.
 MaintenanceFinishedTitle=ScreenTab %1 Complete
@@ -90,18 +90,25 @@ const
 var
   InstalledVersion: String;
   MaintenanceAction: String;
+  PreserveStartupEnabled: Boolean;
 
 procedure InitializeWizard;
 var
-  InstalledDirectory, ExistingDescription, ActionCaption: String;
+  InstalledDirectory, ExistingDescription, ActionCaption, StartupCommand: String;
   PreviousVersion, IncomingVersion: Int64;
   Comparison: Integer;
 begin
   InstalledVersion := '';
   MaintenanceAction := '';
+  PreserveStartupEnabled := False;
   if not RegQueryStringValue(HKLM64, ScreenTabUninstallKey,
     'InstallLocation', InstalledDirectory) then Exit;
   if not FileExists(AddBackslash(InstalledDirectory) + '{#MyAppExeName}') then Exit;
+
+  WizardForm.DirEdit.Text := InstalledDirectory;
+  PreserveStartupEnabled := RegQueryStringValue(HKCU,
+    'Software\Microsoft\Windows\CurrentVersion\Run', 'ScreenTab', StartupCommand) and
+    (StartupCommand <> '');
 
   RegQueryStringValue(HKLM64, ScreenTabUninstallKey,
     'DisplayVersion', InstalledVersion);
@@ -125,6 +132,19 @@ begin
     ExistingDescription, Lowercase(ActionCaption), '{#MyAppVersion}']);
 end;
 
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  { Task controls exist after Inno has prepared this page, not during InitializeWizard. }
+  if (MaintenanceAction <> '') and (PageID = wpSelectTasks) then
+  begin
+    if PreserveStartupEnabled then WizardSelectTasks('startup')
+    else WizardSelectTasks('!startup');
+  end;
+  Result := (MaintenanceAction <> '') and
+    ((PageID = wpWelcome) or (PageID = wpSelectDir) or
+     (PageID = wpSelectProgramGroup) or (PageID = wpSelectTasks));
+end;
+
 procedure CurPageChanged(CurPageID: Integer);
 var
   ActionCaption, VersionDescription: String;
@@ -136,7 +156,6 @@ begin
       begin
         WizardForm.PageNameLabel.Caption :=
           FmtMessage(CustomMessage('MaintenanceReadyTitle'), [ActionCaption]);
-        WizardForm.PageDescriptionLabel.Caption := CustomMessage('MaintenanceReadyDescription');
         WizardForm.NextButton.Caption := '&' + ActionCaption;
         WizardForm.ReadyLabel.Caption := FmtMessage(CustomMessage('MaintenanceReadyInstructions'), [
           ActionCaption, Lowercase(ActionCaption), '{#MyAppVersion}']);
@@ -145,6 +164,11 @@ begin
             InstalledVersion, '{#MyAppVersion}'])
         else
           VersionDescription := FmtMessage(CustomMessage('UnknownVersionChange'), ['{#MyAppVersion}']);
+        if InstalledVersion <> '' then
+          WizardForm.PageDescriptionLabel.Caption :=
+            FmtMessage(CustomMessage('MaintenanceVersionDescription'), [InstalledVersion, '{#MyAppVersion}'])
+        else
+          WizardForm.PageDescriptionLabel.Caption := VersionDescription;
         WizardForm.ReadyMemo.Text := VersionDescription + #13#10#13#10 + WizardForm.ReadyMemo.Text;
       end;
     wpInstalling:

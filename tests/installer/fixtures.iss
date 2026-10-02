@@ -3,12 +3,21 @@ var
   FixtureExecutablePresent: Boolean;
   FixtureVersion: String;
   FixtureDirectory: String;
+  FixtureStartupEnabled: Boolean;
 
 function FixtureRegQueryStringValue(RootKey: Integer;
   SubKeyName, ValueName: String; var Value: String): Boolean;
 begin
   Result := False;
   Value := '';
+  if (RootKey = HKCU) and
+    (SubKeyName = 'Software\Microsoft\Windows\CurrentVersion\Run') and
+    (ValueName = 'ScreenTab') then
+  begin
+    Result := FixtureStartupEnabled;
+    if Result then Value := '"' + AddBackslash(FixtureDirectory) + 'ScreenTab.exe" --startup';
+    Exit;
+  end;
   if not FixtureRegistered then Exit;
   if RootKey <> HKLM64 then Exit;
   if SubKeyName <>
