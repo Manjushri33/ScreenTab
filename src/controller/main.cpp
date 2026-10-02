@@ -322,7 +322,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             break;
         case ID_ABOUT:
             MessageBoxW(hwnd,
-                        L"ScreenTab 0.1.1\nNative Alt+Tab, filtered to the active monitor.",
+                        L"ScreenTab 0.1.2\nNative Alt+Tab, filtered to the active monitor.",
                         L"About ScreenTab", MB_OK | MB_ICONINFORMATION);
             break;
         case ID_EXIT:

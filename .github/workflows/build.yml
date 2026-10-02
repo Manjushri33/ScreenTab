@@ -39,6 +39,9 @@ jobs:
       - name: Build
         run: cmake --build build --config Release
 
+      - name: Run native hook tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
       - name: Create portable package
         shell: powershell
         run: |

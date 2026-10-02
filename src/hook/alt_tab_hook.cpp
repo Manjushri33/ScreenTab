@@ -4,6 +4,8 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cwchar>
+#include <initializer_list>
 #include <MinHook.h>
 
 namespace {
@@ -35,9 +37,25 @@ PositionFn g_positionOriginal=nullptr;
 
 bool Enabled(){return g_state && g_state->protocolVersion==mat::kProtocolVersion && InterlockedCompareExchange(&g_state->enabled,0,0)!=0;}
 
+bool IsSuitableForegroundWindow(HWND hwnd) {
+    if(!hwnd || !IsWindowVisible(hwnd) || hwnd==GetShellWindow()) return false;
+    wchar_t className[128]{};
+    if(!GetClassNameW(hwnd,className,128)) return false;
+    // Explorer can focus a staging window before creating Alt+Tab. A previous
+    // switcher host can also still own foreground. Neither identifies the app
+    // the user is working in; use the cursor monitor in these shell contexts.
+    for(const wchar_t* shellClass : {L"ForegroundStaging",
+                                    L"XamlExplorerHostIslandWindow",
+                                    L"XamlExplorerHostIslandWindow_WASDK",
+                                    L"MultitaskingViewFrame"}) {
+        if(std::wcscmp(className,shellClass)==0) return false;
+    }
+    return true;
+}
+
 HMONITOR CurrentWorkMonitor() {
     HWND foreground=GetForegroundWindow();
-    if (foreground) {
+    if (IsSuitableForegroundWindow(foreground)) {
         HMONITOR mon=MonitorFromWindow(foreground,MONITOR_DEFAULTTONEAREST);
         if(mon) return mon;
     }
@@ -70,9 +88,21 @@ HRESULT WINAPI CVirtualDesktop_IsViewVisible_Hook(void* self, void* view, BOOL* 
 }
 
 HRESULT WINAPI XamlAltTabViewHost_Show_Hook(void* self, void* p1, int p2, void* p3) {
-    g_showThread=GetCurrentThreadId();
+    if(!Enabled()) return g_showOriginal(self,p1,p2,p3);
+
+    // Windows can reuse the host long after CreateInstance has returned.
+    // Refresh the monitor and visibility scope on every Show. The positioning
+    // hook consumes g_showThread, so it must not own the visibility guard.
+    const DWORD tid=GetCurrentThreadId();
+    g_targetMonitor=CurrentWorkMonitor();
+    g_lastCreateThread=tid;
+    g_createTick=GetTickCount64();
+    const DWORD previousFilterThread=g_createThread.exchange(tid);
+    g_showThread=tid;
     HRESULT hr=g_showOriginal(self,p1,p2,p3);
-    g_showThread=0; return hr;
+    g_showThread=0;
+    g_createThread=previousFilterThread;
+    return hr;
 }
 
 HRESULT WINAPI TaskGroupPosition_Hook(void* self, RectF* rect) {

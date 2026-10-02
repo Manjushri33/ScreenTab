@@ -1,5 +1,5 @@
 #define MyAppName "ScreenTab"
-#define MyAppVersion "0.1.1"
+#define MyAppVersion "0.1.2"
 #define MyAppPublisher "Manjushri33"
 #define MyAppURL "https://github.com/Manjushri33/ScreenTab"
 #define MyAppExeName "ScreenTab.exe"
@@ -12,7 +12,7 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
 AppUpdatesURL={#MyAppURL}/releases
-VersionInfoVersion=0.1.1.0
+VersionInfoVersion=0.1.2.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription=ScreenTab installer
 VersionInfoProductName={#MyAppName}

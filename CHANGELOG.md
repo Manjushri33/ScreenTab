@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.2
+
+- Ignore hidden, desktop, and Alt+Tab shell foreground windows when choosing the working monitor; use the cursor monitor instead. This fixes incorrect monitor selection when no File Explorer window is active.
+- Refresh the working monitor and filter visibility whenever Alt+Tab is shown, including when Windows reuses a host after its creation grace period.
+- Keep visibility filtering active after the switcher has been positioned.
+
 ## v0.1.1
 
 - Fix first-run symbol resolution by bundling the Microsoft DbgHelp, SymSrv, and DIA runtime with both downloads.

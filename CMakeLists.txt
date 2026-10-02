@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(ScreenTab VERSION 0.1.1 LANGUAGES CXX)
+project(ScreenTab VERSION 0.1.2 LANGUAGES CXX)
 
 if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
   message(FATAL_ERROR "ScreenTab v0.1 supports Windows 11 x64 only")
@@ -61,3 +61,12 @@ set_target_properties(ScreenTabHook PROPERTIES OUTPUT_NAME "ScreenTabHook")
 
 install(TARGETS ScreenTab ScreenTabHook RUNTIME DESTINATION . LIBRARY DESTINATION .)
 install(FILES ${SCREENTAB_SYMBOL_RUNTIME_FILES} DESTINATION .)
+
+include(CTest)
+if(BUILD_TESTING)
+  add_executable(ScreenTabHookTests tests/alt_tab_hook_tests.cpp)
+  target_include_directories(ScreenTabHookTests PRIVATE src)
+  target_compile_definitions(ScreenTabHookTests PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+  target_link_libraries(ScreenTabHookTests PRIVATE minhook user32)
+  add_test(NAME alt_tab_hook COMMAND ScreenTabHookTests)
+endif()

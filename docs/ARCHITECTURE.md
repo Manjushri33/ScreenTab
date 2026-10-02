@@ -1,6 +1,6 @@
 # Architecture
 
-ScreenTab keeps the native Windows 11 Alt+Tab experience and filters the shell's application-view visibility path only while Alt+Tab is being created.
+ScreenTab keeps the native Windows 11 Alt+Tab experience and filters the shell's application-view visibility path while Alt+Tab is being created or shown, including when Windows reuses a cached host.
 
 ## Components
 
@@ -20,11 +20,15 @@ The tray/controller process:
 
 The Explorer-side module:
 
-- hooks the narrow Alt+Tab creation/visibility path;
-- finds the monitor containing the foreground window, falling back to the cursor monitor;
+- hooks the narrow Alt+Tab creation/show/visibility path;
+- refreshes the monitor containing the foreground window on every Alt+Tab show, falling back to the cursor monitor;
 - lets Windows evaluate each application view normally first;
 - hides a view from Alt+Tab only when its native window belongs to another monitor;
 - leaves Task View (`Win+Tab`) and unrelated shell visibility checks alone.
+
+The visibility scope is independent of the one-shot positioning scope. Positioning the switcher must not end filtering. The short same-thread grace period is refreshed for every show so delayed foreground-view additions are also filtered.
+
+Before creating Alt+Tab, Windows can transfer foreground to Explorer's hidden `ForegroundStaging` window. That window's monitor does not identify the user's working monitor. Hidden windows, the shell desktop, and known native switcher host classes are excluded from foreground selection, allowing the cursor fallback to select the correct monitor. A normal File Explorer window (`CabinetWClass`) remains a suitable foreground window.
 
 ## Why a native hook?
 
