@@ -7,6 +7,7 @@
 #include <cwchar>
 #include <initializer_list>
 #include <MinHook.h>
+#include <servprov.h>
 
 namespace {
 constexpr ULONGLONG kDeltaThresholdMs = 250;
@@ -87,6 +88,32 @@ HRESULT WINAPI CVirtualDesktop_IsViewVisible_Hook(void* self, void* view, BOOL* 
     return originalResult;
 }
 
+// Undocumented shell service. Recent Windows 11 builds place and size the
+// switcher for the IImmersiveMonitor passed to XamlAltTabViewHost::Show.
+constexpr CLSID kClsidImmersiveShell{0xC2F03A33,0x21F5,0x47FA,{0xB4,0xBB,0x15,0x63,0x62,0xA2,0xF2,0x39}};
+constexpr GUID kSidImmersiveMonitorService{0x47094E3A,0x0CF2,0x430F,{0x80,0x6F,0xCF,0x9E,0x4F,0x0F,0x12,0xDD}};
+constexpr IID kIidImmersiveMonitorManager{0x4D4C1E64,0xE410,0x4FAA,{0xBA,0xFA,0x59,0xCA,0x06,0x9B,0xFE,0xC2}};
+struct IImmersiveMonitorManager : IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetCount(UINT*)=0;
+    virtual HRESULT STDMETHODCALLTYPE GetConnectedCount(UINT*)=0;
+    virtual HRESULT STDMETHODCALLTYPE GetAt(UINT,IUnknown**)=0;
+    virtual HRESULT STDMETHODCALLTYPE GetFromHandle(HMONITOR,IUnknown**)=0;
+};
+
+// Returns an owned IImmersiveMonitor, or nullptr to keep Windows' choice.
+IUnknown* ImmersiveMonitorFromHandle(HMONITOR monitor) {
+    IServiceProvider* shell=nullptr;
+    if(FAILED(CoCreateInstance(kClsidImmersiveShell,nullptr,CLSCTX_LOCAL_SERVER,IID_PPV_ARGS(&shell)))) return nullptr;
+    IImmersiveMonitorManager* manager=nullptr;
+    HRESULT hr=shell->QueryService(kSidImmersiveMonitorService,kIidImmersiveMonitorManager,reinterpret_cast<void**>(&manager));
+    shell->Release();
+    if(FAILED(hr) || !manager) return nullptr;
+    IUnknown* result=nullptr;
+    if(FAILED(manager->GetFromHandle(monitor,&result))) result=nullptr;
+    manager->Release();
+    return result;
+}
+
 HRESULT WINAPI XamlAltTabViewHost_Show_Hook(void* self, void* p1, int p2, void* p3) {
     if(!Enabled()) return g_showOriginal(self,p1,p2,p3);
 
@@ -99,7 +126,9 @@ HRESULT WINAPI XamlAltTabViewHost_Show_Hook(void* self, void* p1, int p2, void* 
     g_createTick=GetTickCount64();
     const DWORD previousFilterThread=g_createThread.exchange(tid);
     g_showThread=tid;
-    HRESULT hr=g_showOriginal(self,p1,p2,p3);
+    IUnknown* target=ImmersiveMonitorFromHandle(g_targetMonitor.load());
+    HRESULT hr=g_showOriginal(self,target ? target : p1,p2,p3);
+    if(target) target->Release();
     g_showThread=0;
     g_createThread=previousFilterThread;
     return hr;

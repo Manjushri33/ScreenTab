@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.5
+
+- Fix Alt+Tab opening on the wrong monitor after the November 2026 Windows 11 update (build 26200.9974). Windows no longer calls the switcher positioning path ScreenTab used, so ScreenTab now passes the working monitor directly when Alt+Tab is shown.
+
 ## v0.1.4
 
 - Open existing installations directly at update confirmation, with the installed/new versions and Update button visible on the first screen.
